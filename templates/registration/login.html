@@ -1,41 +1,18 @@
-{% extends "base.html" %}
+{% extends "registration/auth_frame.html" %}
 
 {% block title %}Вход — Enactus OS{% endblock %}
-{% block content %}
-    <div class="login-layout">
-        <div class="login-brand">
-            <div class="brand">
-                <span class="brand-mark" aria-hidden="true"><svg class="icon"><use href="#icon-brand"/></svg></span>
-                <span>Enactus <strong>OS</strong></span>
-            </div>
-            <div class="login-brand-copy">
-                <p class="eyebrow">Enactus OS</p>
-                <p class="login-statement">Рабочее пространство для вашей команды</p>
-                <p>Ваши организации доступны через одну учётную запись.</p>
-            </div>
-        </div>
-        <div class="login-main">
-            <div class="login-tools">{% include "includes/theme_control.html" %}</div>
-            <section class="login-card" aria-labelledby="login-heading">
-                <p class="eyebrow">Учётная запись</p>
-                <h1 id="login-heading">Вход в Enactus OS</h1>
-                <p class="muted">Введите имя пользователя и пароль.</p>
-                <form method="post" class="form-stack">
-                    {% csrf_token %}
-                    {% if form.non_field_errors %}
-                        <div class="form-errors" role="alert">{{ form.non_field_errors }}</div>
-                    {% endif %}
-                    {% for field in form.visible_fields %}
-                        <div class="form-field">
-                            {{ field.label_tag }}
-                            {{ field }}
-                            {% if field.errors %}<div class="form-errors" role="alert">{{ field.errors }}</div>{% endif %}
-                        </div>
-                    {% endfor %}
-                    <input type="hidden" name="next" value="{{ next }}">
-                    <button class="button button-primary" type="submit">Войти <svg class="icon" aria-hidden="true"><use href="#icon-arrow"/></svg></button>
-                </form>
-            </section>
-        </div>
-    </div>
+{% block auth_heading %}Вход в Enactus OS{% endblock %}
+{% block auth_body %}
+    <p class="muted">Введите имя пользователя и пароль.</p>
+    <form method="post" class="form-stack">
+        {% csrf_token %}
+        {% include "registration/form_fields.html" %}
+        <input type="hidden" name="next" value="{{ next }}">
+        <button class="button button-primary" type="submit">Войти <svg class="icon" aria-hidden="true"><use href="#icon-arrow"/></svg></button>
+    </form>
+    <nav class="auth-links" aria-label="Действия с учётной записью">
+        <a href="{% url 'register' %}">Создать аккаунт</a>
+        <a href="{% url 'password_reset' %}">Забыли пароль?</a>
+        <a href="{% url 'resend_verification' %}">Повторно отправить письмо подтверждения</a>
+    </nav>
 {% endblock %}

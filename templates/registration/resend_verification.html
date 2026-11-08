@@ -1,0 +1,13 @@
+{% extends "registration/auth_frame.html" %}
+
+{% block title %}Повторное подтверждение — Enactus OS{% endblock %}
+{% block auth_heading %}Повторить отправку письма{% endblock %}
+{% block auth_body %}
+    <p class="muted">Введите имя пользователя и адрес, указанные при регистрации.</p>
+    <form method="post" class="form-stack" id="resend-verification-form">
+        {% csrf_token %}
+        {% include "registration/form_fields.html" %}
+        <button class="button button-primary" type="submit">Запросить письмо</button>
+    </form>
+    <div class="auth-links"><a href="{% url 'login' %}">Вернуться ко входу</a></div>
+{% endblock %}

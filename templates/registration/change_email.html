@@ -1,0 +1,13 @@
+{% extends "registration/auth_frame.html" %}
+
+{% block title %}Изменение электронной почты — Enactus OS{% endblock %}
+{% block auth_heading %}Изменить электронную почту{% endblock %}
+{% block auth_body %}
+    <p class="muted">Укажите новый адрес и текущий пароль. Новый адрес станет основным после подтверждения по ссылке в письме.</p>
+    <form method="post" class="form-stack" id="email-change-form">
+        {% csrf_token %}
+        {% include "registration/form_fields.html" %}
+        <button class="button button-primary" type="submit">Отправить письмо подтверждения</button>
+    </form>
+    <div class="auth-links"><a href="{% url 'user-profile' %}">Вернуться в профиль</a></div>
+{% endblock %}

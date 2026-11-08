@@ -23,11 +23,21 @@ services:
   web:
     image: &app-image "${COMPOSE_PROJECT_NAME:-enactus_os_next_dev}-web"
     build: .
-    command: ["sh", "-c", "python manage.py migrate --noinput && exec python manage.py runserver 0.0.0.0:8000 --noreload"]
+    command: ["sh", "-c", "umask 077 && python manage.py migrate --noinput && exec python manage.py runserver 0.0.0.0:8000 --noreload"]
     environment: &app-environment
       DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY:?Run python3 scripts/init-env.py}
       DJANGO_DEBUG: ${DJANGO_DEBUG:-0}
       DJANGO_ALLOWED_HOSTS: ${DJANGO_ALLOWED_HOSTS:-localhost,127.0.0.1}
+      ACCOUNT_PUBLIC_ORIGIN: ${ACCOUNT_PUBLIC_ORIGIN:-http://127.0.0.1:${WEB_PORT:-8002}}
+      ACCOUNT_TRUSTED_PROXY_NETWORKS: ${ACCOUNT_TRUSTED_PROXY_NETWORKS:-}
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      SMTP_USE_TLS: ${SMTP_USE_TLS:-}
+      SMTP_USE_SSL: ${SMTP_USE_SSL:-}
+      SMTP_FROM_EMAIL: ${SMTP_FROM_EMAIL:-}
+      SMTP_TIMEOUT: ${SMTP_TIMEOUT:-}
       POSTGRES_DB: ${POSTGRES_DB:?Run python3 scripts/init-env.py}
       POSTGRES_USER: ${POSTGRES_USER:?Run python3 scripts/init-env.py}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Run python3 scripts/init-env.py}

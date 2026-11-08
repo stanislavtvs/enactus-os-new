@@ -1,0 +1,13 @@
+{% extends "registration/auth_frame.html" %}
+
+{% block title %}Регистрация — Enactus OS{% endblock %}
+{% block auth_heading %}Создать аккаунт{% endblock %}
+{% block auth_body %}
+    <p class="muted">Укажите электронную почту, которую сможете подтвердить.</p>
+    <form method="post" class="form-stack" id="registration-form">
+        {% csrf_token %}
+        {% include "registration/form_fields.html" %}
+        <button class="button button-primary" type="submit">Зарегистрироваться</button>
+    </form>
+    <div class="auth-links"><a href="{% url 'login' %}">Уже есть аккаунт? Войти</a></div>
+{% endblock %}

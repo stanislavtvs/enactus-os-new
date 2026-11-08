@@ -1,0 +1,36 @@
+{% extends "registration/auth_frame.html" %}
+
+{% block title %}Подтверждение электронной почты — Enactus OS{% endblock %}
+{% block auth_heading %}{% if verified %}Электронная почта подтверждена{% elif can_confirm %}Подтвердите электронную почту{% elif rate_limited %}Повторите позже{% else %}Ссылка больше не действует{% endif %}{% endblock %}
+{% block auth_body %}
+    {% if verified %}
+        <p class="muted">Адрес подтверждён.</p>
+        <div class="auth-links">
+            {% if request.user.is_authenticated %}
+                <a href="{% url 'user-profile' %}">Вернуться в профиль</a>
+            {% else %}
+                <a href="{% url 'login' %}">Войти в Enactus OS</a>
+            {% endif %}
+        </div>
+    {% elif can_confirm %}
+        {% if requires_password %}
+            <p class="muted">Введите пароль, который задали при регистрации, чтобы подтвердить адрес.</p>
+        {% else %}
+            <p class="muted">Подтвердите адрес, чтобы завершить операцию.</p>
+        {% endif %}
+        <form method="post" action="{% url 'verify_email' %}" class="form-stack" id="verify-email-form">
+            {% csrf_token %}
+            {% if requires_password %}{% include "registration/form_fields.html" %}{% endif %}
+            <button class="button button-primary" type="submit">Подтвердить адрес</button>
+        </form>
+    {% elif rate_limited %}
+        <p class="form-errors" role="alert">Слишком много попыток подтвердить адрес. Повторите позже.</p>
+        <div class="auth-links"><a href="{% url 'login' %}">Вернуться ко входу</a></div>
+    {% else %}
+        <p class="muted">Запросите новое письмо для регистрации или начните смену адреса в профиле.</p>
+        <nav class="auth-links" aria-label="Действия с учётной записью">
+            <a href="{% url 'resend_verification' %}">Запросить письмо подтверждения</a>
+            <a href="{% url 'login' %}">Вернуться ко входу</a>
+        </nav>
+    {% endif %}
+{% endblock %}

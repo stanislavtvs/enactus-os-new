@@ -1,7 +1,8 @@
 from django.contrib import admin
-from django.contrib.auth.views import LoginView, LogoutView
+from django.contrib.auth import views as auth_views
 from django.urls import path
 
+from apps.accounts import views as account_views
 from apps.access.views import organization_access_page
 from apps.calendar_app.views import organization_calendar, organization_calendar_invitations
 from apps.audit.views import audit_page
@@ -125,7 +126,22 @@ urlpatterns = [
     path("organizations/<int:org_id>/tasks/<int:task_id>/", organization_task, name="organization-task"),
     path("organizations/<int:org_id>/projects/<int:project_id>/tasks/", project_tasks, name="project-tasks"),
     path("admin/", admin.site.urls),
-    path("accounts/login/", LoginView.as_view(), name="login"),
-    path("accounts/logout/", LogoutView.as_view(), name="logout"),
+    path("accounts/login/", account_views.AccountLoginView.as_view(), name="login"),
+    path("accounts/logout/", auth_views.LogoutView.as_view(), name="logout"),
+    path("accounts/register/", account_views.register, name="register"),
+    path("accounts/verification-sent/", account_views.verification_sent, name="verification_sent"),
+    path("accounts/verify-email/", account_views.verify_email, name="verify_email"),
+    path("accounts/verify-email/<str:token>/", account_views.verify_email_token, name="verify_email_token"),
+    path("accounts/resend-verification/", account_views.resend_verification, name="resend_verification"),
+    path("accounts/change-email/", account_views.change_email, name="change_email"),
+    path("accounts/password-reset/", account_views.AccountPasswordResetView.as_view(), name="password_reset"),
+    path("accounts/password-reset/done/", auth_views.PasswordResetDoneView.as_view(), name="password_reset_done"),
+    path("accounts/reset/done/", auth_views.PasswordResetCompleteView.as_view(), name="password_reset_complete"),
+    path(
+        "accounts/reset/<uidb64>/<token>/", account_views.AccountPasswordResetConfirmView.as_view(),
+        name="password_reset_confirm",
+    ),
+    path("accounts/password-change/", account_views.AccountPasswordChangeView.as_view(), name="password_change"),
+    path("accounts/password-change/done/", auth_views.PasswordChangeDoneView.as_view(), name="password_change_done"),
     path("api/v1/", api.urls),
 ]

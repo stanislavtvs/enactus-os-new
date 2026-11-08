@@ -1,0 +1,15 @@
+{% extends "registration/auth_frame.html" %}
+
+{% block title %}Подтверждение электронной почты — Enactus OS{% endblock %}
+{% block auth_heading %}Проверьте почту{% endblock %}
+{% block auth_body %}
+    <p class="muted">Если запрос можно обработать, мы отправим письмо с инструкцией. Откройте письмо и подтвердите адрес.</p>
+    <nav class="auth-links" aria-label="Действия с учётной записью">
+        {% if request.user.is_authenticated %}
+            <a href="{% url 'user-profile' %}">Вернуться в профиль</a>
+        {% else %}
+            <a href="{% url 'resend_verification' %}">Повторно отправить письмо</a>
+            <a href="{% url 'login' %}">Перейти ко входу</a>
+        {% endif %}
+    </nav>
+{% endblock %}

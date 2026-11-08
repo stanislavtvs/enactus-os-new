@@ -1,0 +1,19 @@
+{% if form.non_field_errors %}
+    <div class="form-errors" role="alert">{{ form.non_field_errors }}</div>
+{% endif %}
+{% for field in form.hidden_fields %}
+    {{ field }}
+    {% if field.errors %}<div class="form-errors" role="alert">{{ field.errors }}</div>{% endif %}
+{% endfor %}
+{% for field in form.visible_fields %}
+    <div class="form-field">
+        {{ field.label_tag }}
+        {{ field }}
+        {% if field.help_text %}
+            <div class="form-hint muted auth-help" id="{{ field.auto_id }}_helptext">{{ field.help_text }}</div>
+        {% endif %}
+        {% if field.errors %}
+            <div class="form-errors" id="{{ field.auto_id }}_error" role="alert">{{ field.errors }}</div>
+        {% endif %}
+    </div>
+{% endfor %}

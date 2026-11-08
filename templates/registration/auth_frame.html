@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block extra_head %}
+    <link rel="stylesheet" href="{% static 'accounts/auth.css' %}">
+{% endblock %}
+
+{% block content %}
+    {% if request.user.is_authenticated and request.resolver_match.url_name != "login" %}
+        <section class="card card-padded auth-account-card" aria-labelledby="auth-heading">
+    {% else %}
+        <div class="login-layout">
+            <div class="login-brand">
+                <div class="brand">
+                    <span class="brand-mark" aria-hidden="true"><svg class="icon"><use href="#icon-brand"/></svg></span>
+                    <span>Enactus <strong>OS</strong></span>
+                </div>
+                <div class="login-brand-copy">
+                    <p class="eyebrow">Enactus OS</p>
+                    <p class="login-statement">Рабочее пространство для вашей команды</p>
+                    <p>Ваши организации доступны через одну учётную запись.</p>
+                </div>
+            </div>
+            <div class="login-main">
+                <div class="login-tools">{% include "includes/theme_control.html" %}</div>
+                <section class="login-card" aria-labelledby="{% if request.resolver_match.url_name == 'login' %}login-heading{% else %}auth-heading{% endif %}">
+    {% endif %}
+                    <p class="eyebrow">Учётная запись</p>
+                    <h1 id="{% if request.resolver_match.url_name == 'login' %}login-heading{% else %}auth-heading{% endif %}">{% block auth_heading %}{% endblock %}</h1>
+                    {% block auth_body %}{% endblock %}
+                </section>
+    {% if not request.user.is_authenticated or request.resolver_match.url_name == "login" %}
+            </div>
+        </div>
+    {% endif %}
+{% endblock %}

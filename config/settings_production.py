@@ -15,12 +15,18 @@ if len(SECRET_KEY) < 50 or len(set(SECRET_KEY)) < 6 or SECRET_KEY.startswith("dj
 
 DEBUG = False
 ALLOWED_HOSTS = [PUBLIC_HOST]
-CSRF_TRUSTED_ORIGINS = [f"https://{PUBLIC_HOST}"]
+ACCOUNT_PUBLIC_ORIGIN = f"https://{PUBLIC_HOST}"
+CSRF_TRUSTED_ORIGINS = [ACCOUNT_PUBLIC_ORIGIN]
 SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 SECURE_SSL_REDIRECT = True
 SECURE_HSTS_SECONDS = 31536000
 SESSION_COOKIE_SECURE = True
 CSRF_COOKIE_SECURE = True
+EMAIL_FILE_PATH = None
+if not EMAIL_HOST:
+    EMAIL_BACKEND = "django.core.mail.backends.dummy.EmailBackend"
+elif not SMTP_FROM_EMAIL or not (EMAIL_USE_TLS or EMAIL_USE_SSL):
+    raise ImproperlyConfigured("Production SMTP requires SMTP_FROM_EMAIL and TLS or SSL.")
 
 STATIC_ROOT = BASE_DIR / "collected_static"
 MIDDLEWARE = [MIDDLEWARE[0], "whitenoise.middleware.WhiteNoiseMiddleware", *MIDDLEWARE[1:]]

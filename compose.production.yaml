@@ -5,6 +5,15 @@ x-app-environment: &app-environment
   DJANGO_SETTINGS_MODULE: config.settings_production
   DJANGO_PUBLIC_HOST: ${DJANGO_PUBLIC_HOST:?Set the HTTPS host in .env.production}
   DJANGO_SECRET_KEY: ${ENACTUS_PROD_SECRET_KEY:?Set a production key in .env.production}
+  ACCOUNT_TRUSTED_PROXY_NETWORKS: ${ACCOUNT_TRUSTED_PROXY_NETWORKS:-}
+  SMTP_HOST: ${SMTP_HOST:-}
+  SMTP_PORT: ${SMTP_PORT:-}
+  SMTP_USER: ${SMTP_USER:-}
+  SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+  SMTP_USE_TLS: ${SMTP_USE_TLS:-}
+  SMTP_USE_SSL: ${SMTP_USE_SSL:-}
+  SMTP_FROM_EMAIL: ${SMTP_FROM_EMAIL:-}
+  SMTP_TIMEOUT: ${SMTP_TIMEOUT:-}
   POSTGRES_DB: enactus_os_next_prod
   POSTGRES_USER: enactus_os_next_prod
   POSTGRES_PASSWORD: ${ENACTUS_PROD_POSTGRES_PASSWORD:?Set a production database password in .env.production}
