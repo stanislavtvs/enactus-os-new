@@ -4,6 +4,7 @@ from django.utils import timezone
 
 from apps.access.services import organization_access
 
+from .audit import calendar_action
 from . import invitation_services as invitations
 from .models import CalendarEvent
 from .recurrence import resolve_occurrence
@@ -128,10 +129,13 @@ def respond(
         for field, value in fields.items():
             setattr(record, field, value)
         record.save(update_fields=list(fields))
-    CalendarOccurrenceRSVPHistory.objects.create(
+    history_entry = CalendarOccurrenceRSVPHistory.objects.create(
         organization=event.organization, event=event, invitation=invitation, occurrence_key=key,
         actor=access.membership, response=response, response_revision=event.rsvp_revision,
         occurrence_rsvp_revision=occurrence.rsvp_revision,
+    )
+    calendar_action(
+        user, event, "rsvp_occurrence_recorded", metadata={"history_id": history_entry.pk, "occurrence_key": key},
     )
     return _data(invitation, occurrence, record)
 

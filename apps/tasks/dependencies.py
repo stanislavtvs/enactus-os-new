@@ -4,7 +4,10 @@ from django.db import transaction
 from django.shortcuts import get_object_or_404
 
 from .models import TaskDependency
-from .services import UPDATE, TaskConflict, _context, _managed_task, _task_is_writable, visible_task
+from .services import (
+    UPDATE, TaskConflict, _audit_task, _context, _managed_task, _related_audit_scope,
+    _task_is_writable, visible_task,
+)
 
 
 def _rows(access, task):
@@ -46,11 +49,24 @@ def add_dependency(*, user, org_id, task_id, predecessor_id, kind):
         raise TaskConflict("Такая зависимость уже существует.")
     if _creates_cycle(access.organization, task.pk, predecessor.pk):
         raise TaskConflict("Такая зависимость создаёт цикл.")
-    return task.dependencies.create(organization=access.organization, predecessor=predecessor, kind=kind)
+    dependency = task.dependencies.create(organization=access.organization, predecessor=predecessor, kind=kind)
+    _audit_dependency(user, task, dependency, "dependency_added")
+    return dependency
 
 
 @transaction.atomic
 def remove_dependency(*, user, org_id, task_id, dependency_id):
     access, task = _managed_task(user, org_id, task_id, UPDATE)
     dependency = get_object_or_404(_rows(access, task), pk=dependency_id)
+    _audit_dependency(user, task, dependency, "dependency_removed")
     dependency.delete()
+
+
+def _audit_dependency(user, task, dependency, action):
+    _audit_task(
+        user, task, action, force=True,
+        metadata={
+            **_related_audit_scope(dependency.predecessor), "dependency_id": dependency.pk,
+            "predecessor_id": dependency.predecessor_id, "kind": dependency.kind,
+        },
+    )

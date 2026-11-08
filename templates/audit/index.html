@@ -1,0 +1,101 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Журнал действий — {{ organization.name }} — Enactus OS{% endblock %}
+{% block extra_head %}
+    <link rel="stylesheet" href="{% static 'ui/collection.css' %}">
+    <link rel="stylesheet" href="{% static 'audit/audit.css' %}">
+    <script type="module" src="{% static 'audit/audit.js' %}"></script>
+{% endblock %}
+
+{% block content %}
+    <nav class="breadcrumbs" aria-label="Путь к странице">
+        <a href="{% url 'organization-detail' org_id=organization.id %}">{{ organization.name }}</a>
+    </nav>
+    <section id="audit-app" data-api-url="{{ audit_api_url }}" data-organization-name="{{ organization.name }}" aria-labelledby="audit-heading">
+        <header class="page-heading collection-header">
+            <div>
+                <p class="eyebrow">{{ organization.name }}</p>
+                <h1 id="audit-heading" tabindex="-1">Журнал действий</h1>
+                <p class="muted">Значимые изменения в организации. Даты и время указаны в UTC.</p>
+            </div>
+        </header>
+        <noscript><p>Включите JavaScript, чтобы загрузить журнал действий.</p></noscript>
+
+        <form id="audit-filters" class="audit-filters" method="get" hidden>
+            <div class="audit-toolbar">
+                <div class="form-field">
+                    <label for="audit-search">Поиск по объектам</label>
+                    <input type="search" name="q" id="audit-search" autocomplete="off" maxlength="120">
+                </div>
+                <button class="button button-primary" type="submit">Найти</button>
+            </div>
+            <details class="audit-filter-panel">
+                <summary>Фильтры</summary>
+                <div class="audit-filter-fields">
+                    <div class="form-field">
+                        <label for="audit-date-from">С даты</label>
+                        <input type="date" id="audit-date-from" name="date_from">
+                    </div>
+                    <div class="form-field">
+                        <label for="audit-date-to">По дату включительно</label>
+                        <input type="date" id="audit-date-to" name="date_to">
+                    </div>
+                    <div class="form-field">
+                        <label for="audit-actor">Инициатор</label>
+                        <select id="audit-actor" name="actor_id"><option value="">Все инициаторы</option></select>
+                    </div>
+                    <div class="form-field">
+                        <label for="audit-action">Действие</label>
+                        <select id="audit-action" name="action"><option value="">Все действия</option></select>
+                    </div>
+                    <div class="form-field">
+                        <label for="audit-object-type">Категория объекта</label>
+                        <select id="audit-object-type" name="object_type"><option value="">Все категории</option></select>
+                    </div>
+                    <div class="form-field">
+                        <label for="audit-project">Проект</label>
+                        <select id="audit-project" name="project_id"><option value="">Все проекты</option></select>
+                    </div>
+                    <div class="form-field">
+                        <label for="audit-department">Подразделение</label>
+                        <select id="audit-department" name="department_id"><option value="">Все подразделения</option></select>
+                    </div>
+                </div>
+                <div class="audit-filter-actions">
+                    <button class="button button-primary" type="submit">Применить фильтры</button>
+                    <button id="audit-reset" class="button collection-secondary" type="reset">Сбросить</button>
+                </div>
+            </details>
+        </form>
+        <p id="audit-status" class="muted audit-message" role="status"></p>
+        <p id="audit-error" class="form-errors audit-message" role="alert"></p>
+        <button id="audit-retry" class="button collection-secondary" type="button" hidden>Обновить журнал</button>
+        <ol id="audit-list" class="audit-list" aria-label="Записи аудита" role="list"></ol>
+        <nav id="audit-pagination" class="audit-pagination" aria-label="Страницы журнала" hidden>
+            <button id="audit-previous" class="button collection-secondary" type="button">Назад</button>
+            <span id="audit-page" class="muted"></span>
+            <button id="audit-next" class="button collection-secondary" type="button">Далее</button>
+        </nav>
+
+        <dialog id="audit-detail" class="collection-dialog audit-detail" aria-labelledby="audit-detail-title">
+            <header class="collection-dialog-header">
+                <h2 id="audit-detail-title">Подробности записи</h2>
+                <button class="button collection-secondary" type="button" data-dialog-close aria-label="Закрыть подробности">
+                    <svg class="icon" aria-hidden="true"><use href="#icon-close"/></svg>
+                </button>
+            </header>
+            <p id="audit-detail-status" class="muted audit-message" role="status"></p>
+            <p id="audit-detail-error" class="form-errors audit-message" role="alert"></p>
+            <dl id="audit-detail-facts" class="audit-detail-facts"></dl>
+            <section id="audit-detail-changes" aria-labelledby="audit-changes-title" hidden>
+                <h3 id="audit-changes-title">Что изменилось</h3>
+                <ul id="audit-changes-list" class="audit-changes-list" role="list"></ul>
+            </section>
+            <div class="collection-dialog-actions">
+                <a id="audit-object-link" class="button collection-secondary" hidden>Открыть объект</a>
+                <button class="button collection-secondary" type="button" data-dialog-close>Закрыть</button>
+            </div>
+        </dialog>
+    </section>
+{% endblock %}

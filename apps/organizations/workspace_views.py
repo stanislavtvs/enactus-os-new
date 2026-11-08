@@ -8,6 +8,7 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_GET, require_POST, require_http_methods
 
 from apps.access.policy import Access
+from apps.audit.services import record
 from apps.projects.staffing import StaffingConflict, set_assignment_mode
 from apps.tasks.reviews import set_organization_review_policy
 
@@ -98,8 +99,16 @@ def organization_settings(request, org_id):
                 )
                 if not Access(request.user, organization).is_owner:
                     raise PermissionDenied
-                organization.task_assignment_mode = task_assignment_form.cleaned_data["task_mode"]
-                organization.save(update_fields=["task_assignment_mode"])
+                old_mode = organization.task_assignment_mode
+                new_mode = task_assignment_form.cleaned_data["task_mode"]
+                if old_mode != new_mode:
+                    organization.task_assignment_mode = new_mode
+                    organization.save(update_fields=["task_assignment_mode"])
+                    record(
+                        organization_id=org_id, actor_id=request.user.pk, action="organization.updated",
+                        object_type="organization", object_id=org_id,
+                        changes={"task_assignment_mode": {"old": old_mode, "new": new_mode}},
+                    )
             return redirect("organization-settings", org_id=org_id)
     elif request.method == "POST" and request.POST.get("action") == "task_review_policy":
         review_form = TaskReviewPolicyForm(request.POST)

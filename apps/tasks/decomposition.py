@@ -11,7 +11,7 @@ from apps.access.services import organization_access
 from .models import Checklist, ChecklistConversion, ChecklistItem, Task
 from .services import (
     ARCHIVE, UPDATE, TaskConflict, TaskValidation,
-    _can_create, _context, _managed_task, _parent_for_change, _task_is_writable,
+    _audit_task, _can_create, _context, _managed_task, _parent_for_change, _related_audit_scope, _task_is_writable,
     _task_rows, _task_visible, _visible_rows, create_task, visible_task,
 )
 
@@ -223,6 +223,13 @@ def convert_item_to_task(*, user, org_id, task_id, checklist_id, item_id, confir
         organization=access.organization, parent_task=parent, task=child, item=item,
         actor=access.membership, direction=ChecklistConversion.Direction.ITEM_TO_TASK,
     )
+    _audit_task(
+        user, child, "checklist_converted", force=True,
+        metadata={
+            **_related_audit_scope(parent), "kind": ChecklistConversion.Direction.ITEM_TO_TASK,
+            "checklist_id": checklist_id, "item_id": item.pk, "parent_id": parent.pk,
+        },
+    )
     return child
 
 
@@ -245,5 +252,12 @@ def convert_task_to_item(*, user, org_id, task_id, checklist_id, confirm):
     ChecklistConversion.objects.create(
         organization=access.organization, parent_task=parent, task=task, item=item,
         actor=access.membership, direction=ChecklistConversion.Direction.TASK_TO_ITEM,
+    )
+    _audit_task(
+        user, task, "checklist_converted", before={"is_archived": False}, fields=("is_archived",),
+        metadata={
+            **_related_audit_scope(parent), "kind": ChecklistConversion.Direction.TASK_TO_ITEM,
+            "checklist_id": checklist_id, "item_id": item.pk, "parent_id": parent.pk,
+        },
     )
     return item

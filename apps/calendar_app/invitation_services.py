@@ -17,6 +17,7 @@ from apps.projects.models import ProjectMembership
 from apps.projects.services import _context as project_context
 from apps.projects.services import visible_projects
 
+from .audit import calendar_action
 from .invitation_models import CalendarAudience, CalendarInvitation, CalendarInvitationSource, CalendarRSVPHistory
 from .models import CalendarEvent
 from .services import CalendarConflict, _allows, _can_read_event, visible_event
@@ -341,7 +342,7 @@ def send_invitations(*, user, org_id, event_id, reinvite_revoked=False, **select
     if reinvite_revoked and not can_manage_invitations(access, event):
         raise PermissionDenied
     expanded = _expand(AudiencePolicy(access), _selections(**selection))
-    return _send_snapshot(access, event, expanded, reinvite_revoked=reinvite_revoked)
+    return _send_audited_snapshot(access, event, expanded, reinvite_revoked=reinvite_revoked)
 
 
 @transaction.atomic
@@ -359,7 +360,22 @@ def refresh_audience(*, user, org_id, event_id):
         and not (audience.project_id and audience.project.is_archived)
     ]
     expanded = _expand(AudiencePolicy(access), selections) if selections else {}
-    return _send_snapshot(access, event, expanded)
+    return _send_audited_snapshot(access, event, expanded)
+
+
+def _send_audited_snapshot(access, event, expanded, *, reinvite_revoked=False):
+    before = event.audiences.count()
+    sources_before = CalendarInvitationSource.objects.filter(event=event).count()
+    result = _send_snapshot(access, event, expanded, reinvite_revoked=reinvite_revoked)
+    after = event.audiences.count()
+    if result["created"] or before != after or sources_before != CalendarInvitationSource.objects.filter(
+        event=event,
+    ).count():
+        calendar_action(
+            access.user, event, "invitations_sent" if result["created"] else "invitation_audience_changed",
+            metadata={"before_count": before, "after_count": after, "invitation_count": result["created"]},
+        )
+    return result
 
 
 def _managed_invitation_rows(event):
@@ -392,6 +408,7 @@ def revoke_invitation(*, user, org_id, event_id, invitation_id):
     invitation.revoked_at = timezone.now()
     invitation.revoked_by = access.membership
     invitation.save(update_fields=["revoked_at", "revoked_by", "updated_at"])
+    calendar_action(user, event, "invitation_revoked", metadata={"invitation_id": invitation.pk})
 
 
 def effective_response(invitation, event):
@@ -526,8 +543,9 @@ def respond_to_invitation(*, user, invitation_id, response, expected_revision, e
     invitation.response_revision = event.rsvp_revision
     invitation.responded_at = timezone.now()
     invitation.save(update_fields=["response", "response_revision", "responded_at", "updated_at"])
-    CalendarRSVPHistory.objects.create(
+    history = CalendarRSVPHistory.objects.create(
         organization=access.organization, event=event, invitation=invitation,
         actor=access.membership, response=response, response_revision=event.rsvp_revision,
     )
+    calendar_action(user, event, "rsvp_recorded", metadata={"history_id": history.pk})
     return invitation

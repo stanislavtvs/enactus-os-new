@@ -8,6 +8,7 @@ from django.shortcuts import get_object_or_404
 from django.utils import timezone
 
 from apps.access.services import organization_access
+from apps.audit.producer import affected_ids, record_change, snapshot
 from apps.departments.models import DepartmentMembership
 from apps.notifications.producers import emit, scoped_recipients
 from apps.organizations.models import Organization
@@ -125,12 +126,13 @@ def _active_department(access, department_id):
 def can_view_team(access, project):
     if not _can_view(access, project):
         return False
-    return access.allows(TEAM_VIEW_PERMISSION, _context(project)) or (
-        access.membership is not None and project.memberships.filter(
-            organization=access.organization, is_active=True,
-            organization_membership=access.membership,
-        ).exists()
-    )
+    if access.allows(TEAM_VIEW_PERMISSION, _context(project)):
+        return True
+    if hasattr(project, "_active_team_member"):
+        return project._active_team_member
+    return project.memberships.filter(
+        organization=access.organization, is_active=True, organization_membership=access.membership,
+    ).exists()
 
 
 def can_manage_team(access, project):
@@ -181,6 +183,30 @@ def get_request(*, user, org_id, request_id):
     return request
 
 
+REQUEST_AUDIT_FIELDS = (
+    "department_id", "status", "requested_count", "description", "specialization", "desired_start", "duration_days",
+)
+ALLOCATION_AUDIT_FIELDS = ("organization_membership_id", "department_membership_id", "status", "mode")
+
+
+def _audit_request(user, request, verb, before=None, metadata=None):
+    record_change(
+        user=user, action=f"staffing_request.{verb}", instance=request, before=before,
+        fields=REQUEST_AUDIT_FIELDS, department_id=request.department_id, project_id=request.project_id,
+        metadata=metadata,
+    )
+
+
+def _audit_allocation(user, request, allocation, verb, before=None):
+    record_change(
+        user=user, action=f"staffing_allocation.{verb}", instance=allocation, before=before,
+        fields=ALLOCATION_AUDIT_FIELDS, department_id=request.department_id, project_id=request.project_id,
+        metadata={"request_id": request.pk, "affected_department_ids": affected_ids(
+            request.department_id, allocation.department_membership.department_id,
+        )},
+    )
+
+
 @transaction.atomic
 def create_request(*, user, org_id, project_id, department_id, **fields):
     access = organization_access(user=user, org_id=org_id, lock=True)
@@ -191,6 +217,7 @@ def create_request(*, user, org_id, project_id, department_id, **fields):
     request = access.organization.staffing_requests.create(
         project=project, department=department, created_by=user, **fields,
     )
+    _audit_request(user, request, "created")
     return _request_result(request)
 
 
@@ -205,6 +232,7 @@ def _project_request_to_change(access, request_id):
 def update_request(*, user, org_id, request_id, changes):
     access = organization_access(user=user, org_id=org_id, lock=True)
     request = _project_request_to_change(access, request_id)
+    before = snapshot(request, REQUEST_AUDIT_FIELDS)
     draft = request.status == StaffingRequest.Status.DRAFT
     if not draft:
         _open_request(request)
@@ -228,6 +256,9 @@ def update_request(*, user, org_id, request_id, changes):
             fields.append(field)
     if fields:
         request.save(update_fields=[*fields, "updated_at"])
+        _audit_request(user, request, "updated", before, {
+            "affected_department_ids": affected_ids(before["department_id"], request.department_id),
+        })
     return _request_result(request)
 
 
@@ -238,9 +269,11 @@ def submit_request(*, user, org_id, request_id):
     if request.status != StaffingRequest.Status.DRAFT:
         raise StaffingConflict("Отправить можно только черновик запроса.")
     _active_department(access, request.department_id)
+    before = snapshot(request, REQUEST_AUDIT_FIELDS)
     request.status = StaffingRequest.Status.SENT
     request.submitted_at = timezone.now()
     request.save(update_fields=["status", "submitted_at", "updated_at"])
+    _audit_request(user, request, "submitted", before)
     recipients = scoped_recipients(
         access.organization, (ALLOCATE_PERMISSION,), lambda candidate: can_allocate_request(candidate, request),
     )
@@ -250,14 +283,21 @@ def submit_request(*, user, org_id, request_id):
 
 def _close_request(request, actor, status, *, comment=""):
     now = timezone.now()
-    request.allocations.filter(status=StaffingAllocation.Status.PENDING).update(
-        status=StaffingAllocation.Status.REVOKED, resolved_at=now,
-    )
+    before = snapshot(request, REQUEST_AUDIT_FIELDS)
+    pending = request.allocations.filter(status=StaffingAllocation.Status.PENDING)
+    allocations = list(pending.select_related("department_membership"))
+    pending.update(status=StaffingAllocation.Status.REVOKED, resolved_at=now)
+    for allocation in allocations:
+        before_allocation = snapshot(allocation, ALLOCATION_AUDIT_FIELDS)
+        allocation.status = StaffingAllocation.Status.REVOKED
+        _audit_allocation(actor, request, allocation, "revoked", before_allocation)
+
     request.status = status
     request.handled_by = actor
     request.handled_at = now
     request.comment = comment
     request.save(update_fields=["status", "handled_by", "handled_at", "comment", "updated_at"])
+    _audit_request(actor, request, status, before)
     return _request_result(request)
 
 
@@ -365,7 +405,8 @@ def _allocation_status(accepted_count, requested_count):
     return StaffingRequest.Status.SENT
 
 
-def _refresh_request(request, actor=None):
+def _refresh_request(request, actor=None, *, response_actor=None):
+    before = snapshot(request, REQUEST_AUDIT_FIELDS)
     result = _request_result(request)
     request.status = _allocation_status(result.accepted_count, result.requested_count)
     fields = ["status", "updated_at"]
@@ -374,6 +415,7 @@ def _refresh_request(request, actor=None):
         request.handled_at = timezone.now()
         fields.extend(["handled_by", "handled_at"])
     request.save(update_fields=fields)
+    _audit_request(actor or response_actor, request, "status_changed", before)
     return _request_result(request)
 
 
@@ -394,7 +436,7 @@ def _notify_request_progress(user, request, allocation_id, *, already_notified=N
              key=f"staffing.progress:{allocation_id}")
 
 
-def _activate_membership(request, member):
+def _activate_membership(user, request, member):
     membership, created = request.project.memberships.get_or_create(
         organization=request.organization,
         organization_membership=member.organization_membership,
@@ -407,6 +449,15 @@ def _activate_membership(request, member):
         membership.is_active = True
         membership.ended_at = None
         membership.save(update_fields=["source_department", "is_active", "ended_at"])
+    record_change(
+        user=user, action="project.member_added", instance=request.project,
+        department_id=request.project.responsible_department_id, project_id=request.project_id,
+        metadata={
+            "membership_id": membership.pk,
+            "organization_membership_id": member.organization_membership_id,
+            "affected_department_ids": affected_ids(request.department_id, member.department_id),
+        }, force=True,
+    )
 
 
 @transaction.atomic
@@ -441,7 +492,7 @@ def allocate(*, user, org_id, request_id, department_membership_ids):
     allocations = []
     for candidate in candidates:
         if direct:
-            _activate_membership(request, candidate)
+            _activate_membership(user, request, candidate)
         allocation = request.allocations.create(
             organization=access.organization, project=request.project,
             organization_membership=candidate.organization_membership,
@@ -450,6 +501,7 @@ def allocate(*, user, org_id, request_id, department_membership_ids):
             resolved_at=now if direct else None,
         )
         allocations.append(allocation)
+        _audit_allocation(user, request, allocation, "assigned" if direct else "invited")
         if not direct:
             emit(user, "project.invited", "project_invitation", allocation,
                  [candidate.organization_membership.user_id], key=f"project.invite:{allocation.pk}")
@@ -463,10 +515,12 @@ def allocate(*, user, org_id, request_id, department_membership_ids):
     return result
 
 
-def _resolve_allocation(allocation, status):
+def _resolve_allocation(user, request, allocation, status):
+    before = snapshot(allocation, ALLOCATION_AUDIT_FIELDS)
     allocation.status = status
     allocation.resolved_at = timezone.now()
     allocation.save(update_fields=["status", "resolved_at"])
+    _audit_allocation(user, request, allocation, status, before)
 
 
 @transaction.atomic
@@ -484,7 +538,7 @@ def revoke_invitation(*, user, org_id, request_id, allocation_id):
         raise Http404
     if allocation.status != StaffingAllocation.Status.PENDING:
         raise StaffingConflict("Приглашение уже закрыто.")
-    _resolve_allocation(allocation, StaffingAllocation.Status.REVOKED)
+    _resolve_allocation(user, request, allocation, StaffingAllocation.Status.REVOKED)
     return _refresh_request(request, user)
 
 
@@ -523,10 +577,10 @@ def respond_to_invitation(*, user, allocation_id, accept):
         )}
         if not candidate.is_active or candidate.department_id not in branch_ids:
             raise StaffingConflict("Исходное членство в подразделении больше недоступно.")
-        _activate_membership(request, candidate)
+        _activate_membership(user, request, candidate)
         status = StaffingAllocation.Status.ACCEPTED
-    _resolve_allocation(allocation, status)
-    result = _refresh_request(request)
+    _resolve_allocation(user, request, allocation, status)
+    result = _refresh_request(request, response_actor=user)
     kind = "project.invitation_accepted" if accept else "project.invitation_declined"
     emit(user, kind, "staffing_request", result, [allocation.allocated_by_id],
          key=f"project.invitation-response:{allocation.pk}")
@@ -549,6 +603,11 @@ def end_membership(*, user, org_id, project_id, membership_id):
         membership.is_active = False
         membership.ended_at = timezone.now()
         membership.save(update_fields=["is_active", "ended_at"])
+        record_change(
+            user=user, action="project.member_removed", instance=project,
+            department_id=project.responsible_department_id, project_id=project.pk,
+            metadata={"membership_id": membership.pk}, force=True,
+        )
 
 
 @transaction.atomic
@@ -558,5 +617,10 @@ def set_assignment_mode(*, user, org_id, mode):
         raise PermissionDenied
     if mode not in Organization.ProjectAssignmentMode.values:
         raise StaffingConflict("Выберите допустимый режим назначения.")
+    before = snapshot(access.organization, ("project_assignment_mode",))
     access.organization.project_assignment_mode = mode
     access.organization.save(update_fields=["project_assignment_mode"])
+    record_change(
+        user=user, action="organization.project_assignment_mode_changed", instance=access.organization,
+        fields=("project_assignment_mode",), before=before,
+    )

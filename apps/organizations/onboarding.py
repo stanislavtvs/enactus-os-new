@@ -10,6 +10,7 @@ from django.shortcuts import get_object_or_404
 from django.utils import timezone
 
 from apps.access.policy import Access
+from apps.audit.services import record
 
 from .models import JoinRequest, Organization, OrganizationInvitation, OrganizationMembership
 
@@ -67,6 +68,7 @@ def _activate_membership(organization, user_id):
         membership.is_active = True
         membership.can_manage_members = False
         membership.save(update_fields=["is_active", "can_manage_members"])
+    return membership
 
 
 def _require_invitation_policy(organization):
@@ -85,8 +87,15 @@ def set_join_policy(*, actor, org_id, policy):
     if policy not in Organization.JoinPolicy.values:
         raise OnboardingError("Выберите допустимый способ вступления.")
 
-    organization.join_policy = policy
-    organization.save(update_fields=["join_policy"])
+    old_policy = organization.join_policy
+    if old_policy != policy:
+        organization.join_policy = policy
+        organization.save(update_fields=["join_policy"])
+        record(
+            organization_id=org_id, actor_id=actor.pk, action="organization.join_policy_changed",
+            object_type="organization", object_id=org_id,
+            changes={"join_policy": {"old": old_policy, "new": policy}},
+        )
 
 
 @transaction.atomic
@@ -100,8 +109,16 @@ def set_member_manager(*, actor, org_id, membership_id, enabled):
     if not membership.is_active:
         raise OnboardingError("Управление можно делегировать только активному участнику.")
 
-    membership.can_manage_members = enabled
-    membership.save(update_fields=["can_manage_members"])
+    old_value = membership.can_manage_members
+    if old_value != enabled:
+        membership.can_manage_members = enabled
+        membership.save(update_fields=["can_manage_members"])
+        record(
+            organization_id=org_id, actor_id=actor.pk, action="organization.member_management_changed",
+            object_type="organization", object_id=org_id,
+            changes={"can_manage_members": {"old": old_value, "new": enabled}},
+            metadata={"membership_id": membership.pk},
+        )
 
 
 def _token_digest(token):
@@ -146,6 +163,12 @@ def issue_invitation(*, actor, org_id, username):
         token_digest=_token_digest(raw_token),
         expires_at=now + INVITATION_LIFETIME,
     )
+    record(
+        organization_id=org_id, actor_id=actor.pk, action="organization_invitation.issued",
+        object_type="organization_invitation", object_id=invitation.pk,
+        changes={"status": {"old": None, "new": invitation.status}},
+        metadata={"recipient_id": recipient.pk},
+    )
     emit(actor, "organization.invited", "organization_invitation", invitation, [recipient.pk],
          key=f"organization.invite:{invitation.pk}")
     return invitation, raw_token
@@ -167,6 +190,12 @@ def revoke_invitation(*, actor, org_id, invitation_id):
         raise OnboardingError("Приглашение уже закрыто.")
 
     _resolve_invitation(invitation, OrganizationInvitation.Status.REVOKED, timezone.now())
+    record(
+        organization_id=org_id, actor_id=actor.pk, action="organization_invitation.revoked",
+        object_type="organization_invitation", object_id=invitation.pk,
+        changes={"status": {"old": OrganizationInvitation.Status.PENDING, "new": invitation.status}},
+        metadata={"recipient_id": invitation.recipient_id},
+    )
 
 
 @transaction.atomic
@@ -194,12 +223,19 @@ def respond_to_invitation(*, actor, invitation_id=None, token=None, accept):
         raise OnboardingError("Срок действия приглашения истёк.")
 
     status = OrganizationInvitation.Status.DECLINED
+    metadata = {"recipient_id": actor.pk}
     if accept:
         _require_invitation_policy(organization)
-        _activate_membership(organization, actor.pk)
+        metadata["membership_id"] = _activate_membership(organization, actor.pk).pk
         status = OrganizationInvitation.Status.ACCEPTED
 
     _resolve_invitation(invitation, status, now)
+    record(
+        organization_id=organization.pk, actor_id=actor.pk, action=f"organization_invitation.{status}",
+        object_type="organization_invitation", object_id=invitation.pk,
+        changes={"status": {"old": OrganizationInvitation.Status.PENDING, "new": status}},
+        metadata=metadata,
+    )
     return invitation
 
 
@@ -219,7 +255,13 @@ def submit_join_request(*, actor, org_id):
     ).count() >= REQUESTS_PER_HOUR:
         raise OnboardingRateLimit("Лимит заявок исчерпан. Повторите попытку позже.")
 
-    return JoinRequest.objects.create(organization=organization, applicant=actor)
+    join_request = JoinRequest.objects.create(organization=organization, applicant=actor)
+    record(
+        organization_id=org_id, actor_id=actor.pk, action="join_request.submitted",
+        object_type="join_request", object_id=join_request.pk,
+        changes={"status": {"old": None, "new": join_request.status}},
+    )
+    return join_request
 
 
 @transaction.atomic
@@ -230,15 +272,22 @@ def review_join_request(*, actor, org_id, request_id, approve):
         raise OnboardingError("Заявка уже рассмотрена.")
 
     status = JoinRequest.Status.REJECTED
+    metadata = {"recipient_id": join_request.applicant_id}
     if approve:
         _require_request_policy(organization)
         if not join_request.applicant.is_active:
             raise OnboardingError("Учётная запись заявителя неактивна.")
-        _activate_membership(organization, join_request.applicant_id)
+        metadata["membership_id"] = _activate_membership(organization, join_request.applicant_id).pk
         status = JoinRequest.Status.APPROVED
 
     join_request.status = status
     join_request.reviewed_by = actor
     join_request.reviewed_at = timezone.now()
     join_request.save(update_fields=["status", "reviewed_by", "reviewed_at"])
+    record(
+        organization_id=org_id, actor_id=actor.pk, action=f"join_request.{status}",
+        object_type="join_request", object_id=join_request.pk,
+        changes={"status": {"old": JoinRequest.Status.PENDING, "new": status}},
+        metadata=metadata,
+    )
     return join_request

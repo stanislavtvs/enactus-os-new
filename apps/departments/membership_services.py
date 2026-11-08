@@ -7,6 +7,7 @@ from django.shortcuts import get_object_or_404
 from django.utils import timezone
 
 from apps.access.policy import Access
+from apps.audit.services import record
 from apps.organizations.services import visible_organizations
 
 from .models import DepartmentInvitation, DepartmentMembership
@@ -154,8 +155,15 @@ def set_directory_policy(*, user, org_id, visibility):
     if visibility not in organization.DepartmentDirectoryVisibility.values:
         raise DepartmentConflict("Выберите допустимую видимость каталога.")
 
-    organization.department_directory_visibility = visibility
-    organization.save(update_fields=["department_directory_visibility"])
+    old_visibility = organization.department_directory_visibility
+    if old_visibility != visibility:
+        organization.department_directory_visibility = visibility
+        organization.save(update_fields=["department_directory_visibility"])
+        record(
+            organization_id=org_id, actor_id=user.pk, action="organization.updated",
+            object_type="organization", object_id=org_id,
+            changes={"department_directory_visibility": {"old": old_visibility, "new": visibility}},
+        )
 
 
 def _department_invitations(department):
@@ -203,6 +211,12 @@ def issue_invitation(*, user, org_id, department_id, organization_membership_id)
         organization=department.organization, department=department,
         organization_membership=target, invited_by=user,
     )
+    record(
+        organization_id=org_id, actor_id=user.pk, action="department_invitation.issued",
+        object_type="department_invitation", object_id=invitation.pk, department_id=department.pk,
+        changes={"status": {"old": None, "new": invitation.status}},
+        metadata={"organization_membership_id": target.pk},
+    )
     emit(user, "department.invited", "department_invitation", invitation, [target.user_id],
          key=f"department.invite:{invitation.pk}")
     return invitation
@@ -221,6 +235,12 @@ def revoke_invitation(*, user, org_id, department_id, invitation_id):
         raise DepartmentConflict("Приглашение уже закрыто.")
 
     _resolve_invitation(invitation, DepartmentInvitation.Status.REVOKED)
+    record(
+        organization_id=org_id, actor_id=user.pk, action="department_invitation.revoked",
+        object_type="department_invitation", object_id=invitation.pk, department_id=department.pk,
+        changes={"status": {"old": DepartmentInvitation.Status.PENDING, "new": invitation.status}},
+        metadata={"organization_membership_id": invitation.organization_membership_id},
+    )
 
 
 def own_invitations(*, user):
@@ -250,6 +270,7 @@ def respond_to_invitation(*, user, invitation_id, accept):
         raise DepartmentConflict("Приглашение уже закрыто.")
 
     status = DepartmentInvitation.Status.DECLINED
+    metadata = {"organization_membership_id": invitation.organization_membership_id}
     if accept:
         membership, created = DepartmentMembership.objects.select_for_update().get_or_create(
             organization=organization, department=department,
@@ -262,8 +283,15 @@ def respond_to_invitation(*, user, invitation_id, accept):
             membership.ended_at = None
             membership.save(update_fields=["is_active", "ended_at"])
         status = DepartmentInvitation.Status.ACCEPTED
+        metadata["membership_id"] = membership.pk
 
     _resolve_invitation(invitation, status)
+    record(
+        organization_id=organization.pk, actor_id=user.pk, action=f"department_invitation.{status}",
+        object_type="department_invitation", object_id=invitation.pk, department_id=department.pk,
+        changes={"status": {"old": DepartmentInvitation.Status.PENDING, "new": status}},
+        metadata=metadata,
+    )
     return invitation
 
 
@@ -283,3 +311,9 @@ def end_membership(*, user, org_id, department_id, membership_id):
         membership.is_active = False
         membership.ended_at = timezone.now()
         membership.save(update_fields=["is_active", "ended_at"])
+        record(
+            organization_id=org_id, actor_id=user.pk, action="department_membership.removed",
+            object_type="department_membership", object_id=membership.pk, department_id=department.pk,
+            changes={"is_active": {"old": True, "new": False}},
+            metadata={"organization_membership_id": membership.organization_membership_id},
+        )

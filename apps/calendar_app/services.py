@@ -20,6 +20,7 @@ from apps.projects.services import visible_projects
 from apps.tasks.services import can_open_tasks, visible_task_deadlines
 from apps.tasks.statuses import task_workflow_status
 
+from .audit import event_change, event_snapshot
 from .models import CalendarEvent
 
 READ = "calendar.read"
@@ -421,7 +422,10 @@ def create_event(
         location=location, online_url=online_url, project=project, department=department, rsvp_mode=rsvp_mode,
     )
     if recurrence is not None:
-        install_rule(event, recurrence)
+        rule = install_rule(event, recurrence)
+        event_change(user, event, "created", metadata={"frequency": rule.frequency})
+    else:
+        event_change(user, event, "created")
     return event_item(access, event)
 
 
@@ -441,6 +445,7 @@ def update_event(*, user, org_id, event_id, changes):
         raise CalendarValidation("Измените правило повтора отдельным действием для всей серии.")
     validate_series_schedule_change(event, changes)
 
+    before = event_snapshot(event)
     new_project_id = changes.get("project_id", event.project_id)
     new_department_id = changes.get("department_id", event.department_id)
     fields = []
@@ -478,6 +483,7 @@ def update_event(*, user, org_id, event_id, changes):
         fields.append("rsvp_revision")
     if fields:
         event.save(update_fields=[*fields, "updated_at"])
+        event_change(user, event, "updated", before)
         if schedule_changed:
             sync_recurrence_timezone(event)
             emit(user, "calendar.rescheduled", "calendar_event", event, calendar_recipients(event),
@@ -494,9 +500,11 @@ def cancel_event(*, user, org_id, event_id):
     if event.status == CalendarEvent.Status.ARCHIVED:
         raise CalendarConflict("Архивное событие нельзя отменить.")
     if event.status == CalendarEvent.Status.SCHEDULED:
+        before = event_snapshot(event)
         event.status = CalendarEvent.Status.CANCELLED
         event.cancelled_at = timezone.now()
         event.save(update_fields=["status", "cancelled_at", "updated_at"])
+        event_change(user, event, "cancelled", before)
         emit(user, "calendar.cancelled", "calendar_event", event, calendar_recipients(event),
              key=f"calendar.cancel:{event.pk}")
     return event_item(access, event)
@@ -509,7 +517,9 @@ def archive_event(*, user, org_id, event_id):
     if not _allows(access, ARCHIVE, event.project, event.department):
         raise PermissionDenied
     if event.status != CalendarEvent.Status.ARCHIVED:
+        before = event_snapshot(event)
         event.status = CalendarEvent.Status.ARCHIVED
         event.archived_at = timezone.now()
         event.save(update_fields=["status", "archived_at", "updated_at"])
+        event_change(user, event, "archived", before)
     return event_item(access, event)

@@ -2,6 +2,7 @@ from django.core.exceptions import PermissionDenied
 from django.db import transaction
 
 from apps.access.services import organization_access
+from apps.audit.producer import record_change, snapshot
 
 from .models import NotificationEvent, OrganizationNotificationPolicy
 
@@ -83,6 +84,7 @@ def _validated_list(values, allowed, message):
 def update_policy(*, user, org_id, changes):
     organization = _manager(user, org_id, lock=True)
     policy = policy_for(organization.pk)
+    before = snapshot(policy, POLICY_FIELDS)
     changes = dict(changes)
     for field, allowed, message in (
         ("enabled_categories", NotificationEvent.Category.values, "Выберите доступные категории без повторов."),
@@ -100,4 +102,8 @@ def update_policy(*, user, org_id, changes):
             policy.save()
         else:
             policy.save(update_fields=[*changes, "updated_at"])
+        record_change(
+            user=user, action="notification_policy.updated", instance=policy,
+            fields=POLICY_FIELDS, before=before,
+        )
     return _response(policy)

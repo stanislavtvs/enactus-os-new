@@ -6,6 +6,7 @@ from django.shortcuts import get_object_or_404
 from django.utils import timezone
 
 from apps.access.policy import Access
+from apps.audit.services import record
 from apps.organizations.models import Organization
 from apps.organizations.services import visible_organizations
 
@@ -90,7 +91,13 @@ def create_department(*, user, org_id, name, description="", parent_id=None):
     departments, access = _managed_departments(user, org_id)
     parent = _get_parent(departments, parent_id)
     _require(access, "departments.create", parent)
-    return departments.create(name=name, description=description, parent=parent)
+    department = departments.create(name=name, description=description, parent=parent)
+    record(
+        organization_id=org_id, actor_id=user.pk, action="department.created",
+        object_type="department", object_id=department.pk, department_id=department.pk,
+        changes={"name": {"old": None, "new": name}, "parent_id": {"old": None, "new": parent_id}},
+    )
+    return department
 
 
 @transaction.atomic
@@ -103,6 +110,10 @@ def update_department(*, user, org_id, department_id, changes):
 
     if not changes or {"name", "description"} & changes.keys():
         _require(access, "departments.update", department)
+    previous = {
+        field: getattr(department, field)
+        for field in ("name", "description", "parent_id") if field in changes
+    }
     if "parent_id" in changes:
         _require(access, "departments.move", department)
         parent = _get_parent(departments, changes["parent_id"], department_id=department.pk)
@@ -114,6 +125,23 @@ def update_department(*, user, org_id, department_id, changes):
 
     if changes:
         department.save(update_fields=[*changes, "updated_at"])
+        audit_changes = {
+            field: {"old": value, "new": getattr(department, field)}
+            for field, value in previous.items() if value != getattr(department, field)
+        }
+        if audit_changes:
+            moved = "parent_id" in audit_changes
+            metadata = {
+                "affected_department_ids": [
+                    pk for pk in (previous.get("parent_id"), department.parent_id) if pk is not None
+                ],
+            } if moved else None
+            record(
+                organization_id=org_id, actor_id=user.pk,
+                action="department.moved" if moved else "department.updated",
+                object_type="department", object_id=department.pk, department_id=department.pk,
+                changes=audit_changes, metadata=metadata,
+            )
     return department
 
 
@@ -141,8 +169,14 @@ def archive_department(*, user, org_id, department_id):
     for node in active_subtree:
         _require(access, "departments.archive", node)
 
-    active_subtree.update(
+    affected_count = active_subtree.update(
         is_archived=True, updated_at=timezone.now()
+    )
+    record(
+        organization_id=org_id, actor_id=user.pk, action="department.archived",
+        object_type="department", object_id=department.pk, department_id=department.pk,
+        changes={"is_archived": {"old": False, "new": True}},
+        metadata={"affected_count": affected_count},
     )
 
 

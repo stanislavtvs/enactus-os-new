@@ -6,6 +6,7 @@ from django.shortcuts import get_object_or_404
 
 from apps.access.policy import Permission
 from apps.access.services import organization_access
+from apps.audit.producer import affected_ids, record_change, snapshot
 
 from .models import Project, ProjectDepartmentLink, ProjectMembership
 
@@ -193,6 +194,18 @@ def _managed_project(user, org_id, project_id, action, *, allow_archived=False):
     return access, project
 
 
+PROJECT_AUDIT_FIELDS = ("name", "description", "status", "start_date", "planned_end_date",
+                        "lead_membership_id", "responsible_department_id", "is_archived")
+
+
+def _audit_project(user, project, verb, before=None, fields=PROJECT_AUDIT_FIELDS, metadata=None, force=False):
+    record_change(
+        user=user, action=f"project.{verb}", instance=project, before=before, fields=fields,
+        department_id=project.responsible_department_id, project_id=project.pk,
+        metadata=metadata, force=force,
+    )
+
+
 @transaction.atomic
 def create_project(
     *, user, org_id, name, description="", status=Project.Status.DRAFT,
@@ -207,11 +220,13 @@ def create_project(
         _require(access, Permission.PROJECTS_MANAGE_LEAD, department)
     lead = _active_lead(access, lead_membership_id)
     _validate_dates(start_date, planned_end_date)
-    return access.organization.projects.create(
+    project = access.organization.projects.create(
         name=name, description=description, status=status, start_date=start_date,
         planned_end_date=planned_end_date, lead_membership=lead,
         responsible_department=department, created_by=user,
     )
+    _audit_project(user, project, "created")
+    return project
 
 
 @transaction.atomic
@@ -221,6 +236,7 @@ def update_project(*, user, org_id, project_id, changes):
         changes.get("start_date", project.start_date),
         changes.get("planned_end_date", project.planned_end_date),
     )
+    before = snapshot(project, PROJECT_AUDIT_FIELDS)
     fields = []
     for field in ("name", "description", "status", "start_date", "planned_end_date"):
         if field in changes:
@@ -228,6 +244,7 @@ def update_project(*, user, org_id, project_id, changes):
             fields.append(field)
     if fields:
         project.save(update_fields=[*fields, "updated_at"])
+        _audit_project(user, project, "updated", before)
     return project
 
 
@@ -239,6 +256,7 @@ def archive_project(*, user, org_id, project_id):
     if not project.is_archived:
         project.is_archived = True
         project.save(update_fields=["is_archived", "updated_at"])
+        _audit_project(user, project, "archived", {"is_archived": False}, ("is_archived",))
 
 
 @transaction.atomic
@@ -246,8 +264,10 @@ def set_project_lead(*, user, org_id, project_id, lead_membership_id):
     access, project = _managed_project(user, org_id, project_id, Permission.PROJECTS_MANAGE_LEAD)
     lead = _active_lead(access, lead_membership_id)
     if project.lead_membership_id != lead_membership_id:
+        before = snapshot(project, ("lead_membership_id",))
         project.lead_membership = lead
         project.save(update_fields=["lead_membership", "updated_at"])
+        _audit_project(user, project, "lead_changed", before, ("lead_membership_id",))
     return project
 
 
@@ -261,8 +281,15 @@ def set_responsible_department(*, user, org_id, project_id, responsible_departme
     _require(access, Permission.PROJECTS_MANAGE_DEPARTMENTS, department)
     _require(access, Permission.PROJECTS_VIEW, department)
     if project.responsible_department_id != responsible_department_id:
+        previous = project.responsible_department_id
         project.responsible_department = department
         project.save(update_fields=["responsible_department", "updated_at"])
+        _audit_project(
+            user, project, "department_changed", {"responsible_department_id": previous},
+            ("responsible_department_id",),
+            {"affected_department_ids": affected_ids(previous, department.pk if department else None),
+             "organization_scope": previous is None or department is None},
+        )
     return project
 
 
@@ -278,10 +305,16 @@ def set_participating_department(*, user, org_id, project_id, department_id, inc
         _require(access, Permission.PROJECTS_MANAGE_DEPARTMENTS, department)
 
     if include:
-        project.department_links.get_or_create(
+        _, changed = project.department_links.get_or_create(
             project=project, organization=access.organization, department=department,
         )
     else:
-        project.department_links.filter(
+        changed, _ = project.department_links.filter(
             organization=access.organization, department=department,
         ).delete()
+    if changed:
+        _audit_project(
+            user, project, "department_added" if include else "department_removed", fields=(),
+            metadata={"department_id": department_id, "affected_department_ids": [department_id]},
+            force=True,
+        )

@@ -3,6 +3,7 @@ from django.db import transaction
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 
+from apps.audit.services import record
 from apps.departments.models import DepartmentMembership
 from apps.organizations.services import visible_organizations
 
@@ -38,7 +39,7 @@ def _role(access, role_id):
 
 
 def _grants(role):
-    return list(role.permissions.values("code", "include_descendants"))
+    return list(role.permissions.order_by("code").values("code", "include_descendants"))
 
 
 def _check_grant_coverage(access, permissions, department=None):
@@ -81,6 +82,14 @@ def create_role(*, user, org_id, name, permissions):
     _check_grant_coverage(access, permissions)
     role = access.organization.roles.create(name=name)
     _replace_grants(role, permissions)
+    record(
+        organization_id=org_id, actor_id=user.pk, action="role.created",
+        object_type="role", object_id=role.pk,
+        changes={
+            "name": {"old": None, "new": name},
+            "permissions": {"old": [], "new": _grants(role)},
+        },
+    )
     return role
 
 
@@ -92,6 +101,7 @@ def update_role(*, user, org_id, role_id, changes):
         raise AccessConflict("Архивную роль нельзя изменить.")
     _check_role_edit(access, role)
 
+    audit_changes = {}
     if "permissions" in changes:
         permissions = changes["permissions"]
         _validate_grants(permissions)
@@ -100,10 +110,21 @@ def update_role(*, user, org_id, role_id, changes):
             revoked_at__isnull=True, department_membership__isnull=False,
         ).exists():
             raise AccessConflict("Эту роль уже используют в области подразделения.")
+        old_permissions = _grants(role)
+        new_permissions = sorted(permissions, key=lambda grant: grant["code"])
+        if old_permissions != new_permissions:
+            audit_changes["permissions"] = {"old": old_permissions, "new": new_permissions}
         _replace_grants(role, permissions)
     if "name" in changes:
+        if role.name != changes["name"]:
+            audit_changes["name"] = {"old": role.name, "new": changes["name"]}
         role.name = changes["name"]
         role.save(update_fields=["name"])
+    if audit_changes:
+        record(
+            organization_id=org_id, actor_id=user.pk, action="role.updated",
+            object_type="role", object_id=role.pk, changes=audit_changes,
+        )
     return role
 
 
@@ -113,9 +134,16 @@ def archive_role(*, user, org_id, role_id):
     role = _role(access, role_id)
     _check_role_edit(access, role)
     if not role.is_archived:
+        affected_count = role.assignments.filter(revoked_at__isnull=True).count()
         role.is_archived = True
         role.save(update_fields=["is_archived"])
         role.assignments.filter(revoked_at__isnull=True).update(revoked_at=timezone.now())
+        record(
+            organization_id=org_id, actor_id=user.pk, action="role.archived",
+            object_type="role", object_id=role.pk,
+            changes={"is_archived": {"old": False, "new": True}},
+            metadata={"affected_count": affected_count},
+        )
 
 
 def _check_not_self(access, membership_id):
@@ -157,7 +185,19 @@ def assign_role(*, user, org_id, role_id, organization_membership_id, department
     scope = {"role": role, "organization_membership": member, "department_membership": department_member}
     if assignments.filter(**scope, revoked_at__isnull=True).exists():
         raise AccessConflict("Эта роль уже назначена в выбранной области.")
-    return assignments.create(**scope)
+    assignment = assignments.create(**scope)
+    record(
+        organization_id=org_id, actor_id=user.pk, action="role_assignment.assigned",
+        object_type="role_assignment", object_id=assignment.pk,
+        department_id=department.pk if department is not None else None,
+        changes={"is_active": {"old": None, "new": True}},
+        metadata={
+            "role_id": role.pk, "organization_membership_id": member.pk,
+            "department_membership_id": assignment.department_membership_id,
+            "permissions": permissions,
+        },
+    )
+    return assignment
 
 
 @transaction.atomic
@@ -169,10 +209,23 @@ def revoke_role(*, user, org_id, assignment_id):
     )
     _check_not_self(access, assignment.organization_membership_id)
     department = assignment.department_membership.department if assignment.department_membership_id else None
-    _check_grant_coverage(access, _grants(assignment.role), department)
+    permissions = _grants(assignment.role)
+    _check_grant_coverage(access, permissions, department)
     if assignment.revoked_at is None:
         assignment.revoked_at = timezone.now()
         assignment.save(update_fields=["revoked_at"])
+        record(
+            organization_id=org_id, actor_id=user.pk, action="role_assignment.revoked",
+            object_type="role_assignment", object_id=assignment.pk,
+            department_id=department.pk if department is not None else None,
+            changes={"is_active": {"old": True, "new": False}},
+            metadata={
+                "role_id": assignment.role_id,
+                "organization_membership_id": assignment.organization_membership_id,
+                "department_membership_id": assignment.department_membership_id,
+                "permissions": permissions,
+            },
+        )
 
 
 @transaction.atomic
@@ -183,14 +236,38 @@ def assign_position(*, user, org_id, title, organization_membership_id, departme
     scope = {"title": title, "organization_membership": member, "department_membership": department_member}
     if positions.filter(**scope, revoked_at__isnull=True).exists():
         raise AccessConflict("Эта должность уже назначена в выбранной области.")
-    return positions.create(**scope)
+    position = positions.create(**scope)
+    record(
+        organization_id=org_id, actor_id=user.pk, action="position_assignment.assigned",
+        object_type="position_assignment", object_id=position.pk,
+        department_id=department_member.department_id if department_member else None,
+        changes={"title": {"old": None, "new": title}, "is_active": {"old": None, "new": True}},
+        metadata={
+            "organization_membership_id": member.pk,
+            "department_membership_id": position.department_membership_id,
+        },
+    )
+    return position
 
 
 @transaction.atomic
 def revoke_position(*, user, org_id, position_id):
     access = _role_manager(user, org_id)
-    position = get_object_or_404(access.organization.position_assignments, pk=position_id)
+    position = get_object_or_404(
+        access.organization.position_assignments.select_related("department_membership"),
+        pk=position_id,
+    )
     _check_not_self(access, position.organization_membership_id)
     if position.revoked_at is None:
         position.revoked_at = timezone.now()
         position.save(update_fields=["revoked_at"])
+        record(
+            organization_id=org_id, actor_id=user.pk, action="position_assignment.revoked",
+            object_type="position_assignment", object_id=position.pk,
+            department_id=position.department_membership.department_id if position.department_membership_id else None,
+            changes={"is_active": {"old": True, "new": False}},
+            metadata={
+                "organization_membership_id": position.organization_membership_id,
+                "department_membership_id": position.department_membership_id,
+            },
+        )

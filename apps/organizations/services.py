@@ -1,6 +1,8 @@
 from django.core.exceptions import PermissionDenied
 from django.db import transaction
 
+from apps.audit.services import record
+
 from .models import Organization, OrganizationMembership
 
 
@@ -15,6 +17,11 @@ def create_organization(*, user, name):
 
     organization = Organization.objects.create(name=name, owner=user)
     OrganizationMembership.objects.create(organization=organization, user=user)
+    record(
+        organization_id=organization.pk, actor_id=user.pk, action="organization.created",
+        object_type="organization", object_id=organization.pk,
+        changes={"name": {"old": None, "new": name}, "owner_id": {"old": None, "new": user.pk}},
+    )
     return organization
 
 

@@ -9,6 +9,7 @@ from apps.access.api import router as access_router
 from apps.calendar_app.api import router as calendar_router
 from apps.calendar_app.invitation_api import router as calendar_invitation_router
 from apps.calendar_app.recurrence_api import router as calendar_recurrence_router
+from apps.audit.api import router as audit_router
 from apps.notifications.api import router as notifications_router
 from apps.notifications.policy_api import router as notification_policy_router
 from apps.departments.api import router as departments_router
@@ -31,6 +32,7 @@ api = NinjaAPI(
 )
 
 api.add_router("", notifications_router)
+api.add_router("/organizations", audit_router)
 api.add_router("/organizations", notification_policy_router)
 api.add_router("/organizations", calendar_router)
 api.add_router("/organizations", calendar_invitation_router)

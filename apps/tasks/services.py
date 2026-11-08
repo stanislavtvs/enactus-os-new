@@ -7,6 +7,7 @@ from django.shortcuts import get_object_or_404
 from django.utils import timezone
 
 from apps.access.services import organization_access
+from apps.audit.producer import affected_ids, record_change, snapshot
 from apps.notifications.producers import emit
 from apps.organizations.models import Organization
 from apps.projects.models import ProjectMembership
@@ -26,6 +27,10 @@ ARCHIVE = "tasks.archive"
 REQUIRES_ASSIGNEE = {Task.Status.IN_PROGRESS, Task.Status.REVIEW, Task.Status.COMPLETED}
 TERMINAL_STATUSES = {Task.Status.COMPLETED, Task.Status.CANCELLED}
 INHERIT_SCOPE = object()
+TASK_AUDIT_FIELDS = (
+    "name", "description", "priority_level_id", "priority", "planned_start_at", "due_at",
+    "department_id", "parent_id", "status", "workflow_status_id",
+)
 
 
 class TaskConflict(Exception):
@@ -40,6 +45,25 @@ def _context(project, department):
     if department is not None and not department.is_archived:
         return department
     return project_context(project) if project is not None else None
+
+
+def _audit_task(user, task, action, *, before=None, fields=(), metadata=None, force=False):
+    context = _context(task.project, task.department)
+    record_change(
+        user=user, action=f"task.{action}", instance=task, before=before, fields=fields,
+        department_id=context.pk if context is not None else None, project_id=task.project_id,
+        metadata=metadata, force=force,
+    )
+
+
+def _related_audit_scope(*tasks):
+    related = [task for task in tasks if task is not None]
+    departments = [_context(task.project, task.department) for task in related]
+    return {
+        "affected_department_ids": affected_ids(*(department.pk for department in departments if department)),
+        "affected_project_ids": affected_ids(*(task.project_id for task in related)),
+        "organization_scope": any(department is None for department in departments),
+    }
 
 
 def can_view_context(access, project=None, department=None):
@@ -472,6 +496,10 @@ def create_task(
         department=department, parent=parent, created_by=access.membership, workflow_status=initial_status,
         planned_start_at=planned_start_at, due_at=due_at,
     )
+    _audit_task(
+        user, task, "created", fields=TASK_AUDIT_FIELDS,
+        metadata=_related_audit_scope(parent) if parent is not None else None,
+    )
     if assignee_id is not None:
         task = set_assignee(user=user, org_id=org_id, task_id=task.pk, assignee_id=assignee_id)
     return task
@@ -539,7 +567,7 @@ def set_task_parent(*, user, org_id, task_id, parent_id):
     access, task = _managed_task(user, org_id, task_id, UPDATE)
     if parent_id == task.pk:
         raise TaskConflict("Задача не может быть своим родителем.")
-    _parent_for_change(access, task.parent_id, require_writable=False)
+    old_parent = _parent_for_change(access, task.parent_id, require_writable=False)
     parent = _parent_for_change(access, parent_id, require_writable=True)
     if parent is not None:
         parents = dict(access.organization.tasks.values_list("id", "parent_id"))
@@ -551,14 +579,21 @@ def set_task_parent(*, user, org_id, task_id, parent_id):
             visited.add(current)
             current = parents[current]
     if task.parent_id != parent_id:
+        before = snapshot(task, ("parent_id",))
         task.parent = parent
         task.save(update_fields=["parent", "updated_at"])
+        _audit_task(
+            user, task, "parent_changed", before=before, fields=("parent_id",),
+            metadata=_related_audit_scope(old_parent, parent),
+        )
     return task
 
 
 @transaction.atomic
 def update_task(*, user, org_id, task_id, changes):
     access, task = _managed_task(user, org_id, task_id, UPDATE)
+    before = snapshot(task, TASK_AUDIT_FIELDS)
+    previous_context = _context(task.project, task.department)
     fields = []
     if "department_id" in changes:
         if changes["department_id"] != task.department_id:
@@ -591,6 +626,17 @@ def update_task(*, user, org_id, task_id, changes):
             fields.append(field)
     if fields:
         task.save(update_fields=[*fields, "updated_at"])
+        metadata = None
+        if before["department_id"] != task.department_id:
+            current_context = _context(task.project, task.department)
+            metadata = {
+                "affected_department_ids": affected_ids(
+                    previous_context.pk if previous_context else None,
+                    current_context.pk if current_context else None,
+                ),
+                "organization_scope": previous_context is None or current_context is None,
+            }
+        _audit_task(user, task, "updated", before=before, fields=TASK_AUDIT_FIELDS, metadata=metadata)
     return task
 
 
@@ -601,6 +647,7 @@ def archive_task(*, user, org_id, task_id):
         task.is_archived = True
         task.save(update_fields=["is_archived", "updated_at"])
         _cancel_distribution(task, access.membership)
+        _audit_task(user, task, "archived", before={"is_archived": False}, fields=("is_archived",))
 
 
 def _assignable_task(user, org_id, task_id):
@@ -639,6 +686,7 @@ def set_assignee(*, user, org_id, task_id, assignee_id):
         raise TaskConflict("Основной исполнитель уже назначен соисполнителем.")
     if task.assignee_id != assignee_id:
         previous = task.assignee
+        before = snapshot(task, ("assignee_id",))
         task.assignee = assignee
         task.save(update_fields=["assignee", "updated_at"])
         change = task.distributions.create(
@@ -647,6 +695,10 @@ def set_assignee(*, user, org_id, task_id, assignee_id):
             mode=Organization.TaskAssignmentMode.DIRECT, assignee=assignee,
             status=TaskDistribution.Status.ASSIGNED if assignee else TaskDistribution.Status.CLEARED,
             resolved_at=timezone.now(),
+        )
+        _audit_task(
+            user, task, "assigned" if assignee else "unassigned", before=before, fields=("assignee_id",),
+            metadata={"distribution_id": change.pk, "mode": change.mode},
         )
         if previous is not None:
             emit(user, "task.unassigned", "task", task, [previous.user_id], key=f"task-assignment:{change.pk}:removed")
@@ -662,6 +714,7 @@ def set_collaborator(*, user, org_id, task_id, membership_id, include):
     collaborators = task.collaborators.filter(organization=access.organization, organization_membership=member)
     if not include:
         if collaborators.filter(is_active=True).update(is_active=False):
+            _audit_task(user, task, "collaborator_removed", metadata={"membership_id": member.pk}, force=True)
             emit(user, "task.unassigned", "task", task, [member.user_id])
         return
     _candidate(access, task, membership_id)
@@ -675,6 +728,7 @@ def set_collaborator(*, user, org_id, task_id, membership_id, include):
             raise TaskConflict("Этот участник уже назначен соисполнителем.")
         collaborator.is_active = True
         collaborator.save(update_fields=["is_active"])
+    _audit_task(user, task, "collaborator_added", metadata={"membership_id": member.pk}, force=True)
     emit(user, "task.collaborator_added", "task", task, [member.user_id])
 
 
@@ -725,12 +779,13 @@ def _set_workflow_status(access, task, target):
     if conflict is not None:
         raise TaskConflict(conflict)
 
-    previous_stage = task.status
+    before = snapshot(task, ("status", "workflow_status_id"))
     task.workflow_status = target
     task.status = target.stage
     task.save(update_fields=["workflow_status", "status", "updated_at"])
-    if task.status == Task.Status.CANCELLED and previous_stage != task.status:
+    if task.status == Task.Status.CANCELLED and before["status"] != task.status:
         _cancel_distribution(task, access.membership)
+    _audit_task(access.user, task, "status_changed", before=before, fields=tuple(before))
     return task
 
 

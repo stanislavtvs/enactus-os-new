@@ -1,6 +1,7 @@
 from django.urls import reverse
 
 from apps.access.policy import Access, Permission
+from apps.audit.services import can_open_audit
 from apps.calendar_app.services import can_open_calendar
 from apps.projects.services import can_open_projects
 from apps.projects.staffing import can_open_staffing
@@ -15,6 +16,7 @@ from .services import visible_organizations
 ACTIVE_WORKSPACE_KEY = "active_workspace_id"
 
 SCOPED_ROUTES = {
+    "organization-audit",
     "organization-detail",
     "organization-departments",
     "department-members",
@@ -41,6 +43,7 @@ SCOPED_ROUTES = {
 }
 
 PAGE_TITLES = {
+    "organization-audit": "Журнал действий",
     "notifications": "Уведомления",
     "notification-preferences": "Личные настройки уведомлений",
     "organization-notification-policy": "Уведомления организации",
@@ -138,6 +141,7 @@ def _workspace_links(request, workspace, route):
             "organization-manage", "Приглашения и заявки", "invite",
             access.allows(Permission.ORGANIZATIONS_ONBOARDING_MANAGE), (),
         ),
+        ("organization-audit", "Журнал действий", "org", can_open_audit(access), ()),
         ("organization-settings", "Настройки организации", "settings", access.is_owner, ()),
         ("organization-notification-policy", "Уведомления организации", "settings",
          access.allows(Permission.NOTIFICATIONS_MANAGE), ()),

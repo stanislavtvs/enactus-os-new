@@ -25,6 +25,7 @@ INSTALLED_APPS = [
     "apps.tasks.apps.TasksConfig",
     "apps.calendar_app.apps.CalendarConfig",
     "apps.notifications.apps.NotificationsConfig",
+    "apps.audit.apps.AuditConfig",
 ]
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
@@ -33,6 +34,7 @@ MIDDLEWARE = [
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "apps.organizations.workspaces.WorkspaceNavigationMiddleware",
+    "apps.audit.context.AuditOperationMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
 ]

@@ -15,6 +15,7 @@ from .models import Task, TaskDistribution
 from .services import (
     TaskConflict,
     _active_candidates,
+    _audit_task,
     _has_pending_distribution,
     _managed_task,
     _task_is_writable,
@@ -105,6 +106,7 @@ def route_task(*, user, org_id, task_id):
         organization=access.organization, department=task.department, requested_by=access.membership,
         mode=Organization.TaskAssignmentMode.DEPARTMENT,
     )
+    _audit_task(user, task, "routed", metadata={"distribution_id": distribution.pk}, force=True)
     recipients = scoped_recipients(
         access.organization, (DISTRIBUTE,), lambda candidate: can_distribute(candidate, distribution),
     )
@@ -169,6 +171,7 @@ def distribute_task(*, user, org_id, task_id, assignee_id):
     if not _candidate_rows(access, distribution).filter(pk=assignee.pk).exists():
         raise TaskConflict("Кандидат должен состоять в доступном подразделении и в команде проекта, если она нужна.")
     task = distribution.task
+    before = {"assignee_id": task.assignee_id}
     task.assignee = assignee
     task.save(update_fields=["assignee", "updated_at"])
     distribution.assignee = assignee
@@ -176,6 +179,10 @@ def distribute_task(*, user, org_id, task_id, assignee_id):
     distribution.resolved_at = timezone.now()
     distribution.status = TaskDistribution.Status.ASSIGNED
     distribution.save(update_fields=["assignee", "resolved_by", "resolved_at", "status"])
+    _audit_task(
+        user, task, "assigned", before=before, fields=("assignee_id",),
+        metadata={"distribution_id": distribution.pk, "mode": distribution.mode},
+    )
     emit(
         user, "task.assigned", "task", task, {assignee.user_id, task.created_by.user_id},
         key=f"task-distribution:{distribution.pk}:assigned",

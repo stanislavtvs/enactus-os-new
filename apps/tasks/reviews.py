@@ -7,6 +7,7 @@ from django.utils import timezone
 
 from apps.access.policy import Access
 from apps.access.services import organization_access
+from apps.audit.producer import record_change, snapshot
 from apps.notifications.producers import emit, scoped_recipients
 from apps.organizations.models import Organization
 from apps.projects.services import _can_view as can_view_project
@@ -19,6 +20,7 @@ from .services import (
     TaskConflict,
     TaskValidation,
     _assignee_is_active,
+    _audit_task,
     _context,
     _has_pending_distribution,
     _managed_task,
@@ -75,8 +77,13 @@ def set_organization_review_policy(*, user, org_id, policy):
         raise PermissionDenied
     _validate_policy(policy)
     organization = access.organization
+    before = snapshot(organization, ("task_review_policy",))
     organization.task_review_policy = policy
     organization.save(update_fields=["task_review_policy"])
+    record_change(
+        user=user, action="organization.review_policy_changed", instance=organization,
+        before=before, fields=tuple(before),
+    )
     return organization
 
 
@@ -94,8 +101,13 @@ def set_project_review_policy(*, user, org_id, project_id, policy):
     if project.is_archived:
         raise TaskConflict("Маршрут архивного проекта нельзя изменить.")
     _validate_policy(policy, allow_inherit=True)
+    before = snapshot(project, ("task_review_policy",))
     project.task_review_policy = policy
     project.save(update_fields=["task_review_policy", "updated_at"])
+    record_change(
+        user=user, action="project.review_policy_changed", instance=project, before=before,
+        fields=tuple(before), department_id=project.responsible_department_id, project_id=project.pk,
+    )
     return project
 
 
@@ -132,9 +144,11 @@ def set_task_review_policy(*, user, org_id, task_id, policy, reviewer_id=None):
         )
         if not _can_be_reviewer(access, task, reviewer):
             raise TaskConflict("Участник не может быть назначен проверяющим этой задачи.")
+    before = snapshot(task, ("review_policy", "reviewer_id"))
     task.review_policy = policy
     task.reviewer = reviewer
     task.save(update_fields=["review_policy", "reviewer", "updated_at"])
+    _audit_task(user, task, "review_policy_changed", before=before, fields=tuple(before))
     return task
 
 
@@ -309,6 +323,18 @@ def _notify_review_request(actor, task, stage, recipients):
         )
 
 
+def _audit_review(user, task, action, stage, before):
+    submission_version = task.review_submissions.filter(pk__lte=stage.submission_id).count()
+    _audit_task(
+        user, task, action, before=before, fields=tuple(before), force=True,
+        metadata={
+            "submission_id": stage.submission_id, "submission_version": submission_version,
+            "stage_id": stage.pk, "stage_position": stage.position, "kind": stage.kind,
+            "affected_department_ids": [stage.department_id] if stage.department_id else [],
+        },
+    )
+
+
 @transaction.atomic
 def submit_review(*, user, org_id, task_id, comment, links):
     access, task = _managed_task(user, org_id, task_id, SUBMIT)
@@ -333,9 +359,11 @@ def submit_review(*, user, org_id, task_id, comment, links):
         )
         for position, (kind, department, reviewer) in enumerate(specs, start=1)
     ])
+    before = snapshot(task, ("status",))
     task.status = Task.Status.REVIEW
     task.save(update_fields=["status", "updated_at"])
     stage = _current_stage(access, task)
+    _audit_review(user, task, "review_submitted", stage, before)
     reviewers = _review_recipients(access.organization, stage)
     emit(
         user, "review.submitted", "task", task, {task.created_by.user_id} - reviewers,
@@ -360,6 +388,7 @@ def decide_review(*, user, org_id, task_id, stage_id, outcome, comment):
     if outcome == TaskReviewDecision.Outcome.RETURNED and not comment.strip():
         raise TaskValidation("Укажите причину возврата на доработку.")
 
+    before = snapshot(task, ("status", "completed_at"))
     decision = TaskReviewDecision.objects.create(
         organization=access.organization, task=task, stage=stage, actor=access.membership,
         outcome=outcome, comment=comment.strip(),
@@ -371,6 +400,7 @@ def decide_review(*, user, org_id, task_id, stage_id, outcome, comment):
         task.status = Task.Status.COMPLETED
         task.completed_at = timezone.now()
         task.save(update_fields=["status", "completed_at", "updated_at"])
+    _audit_review(user, task, f"review_{outcome}", stage, before)
     emit(
         user, f"review.{outcome}", "task", task, [stage.submission.submitted_by.user_id],
         key=f"task-review-decision:{decision.pk}",

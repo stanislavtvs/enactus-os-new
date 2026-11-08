@@ -4,6 +4,7 @@ from django.urls import path
 
 from apps.access.views import organization_access_page
 from apps.calendar_app.views import organization_calendar, organization_calendar_invitations
+from apps.audit.views import audit_page
 from apps.notifications.views import notification_policy_page, notification_preferences_page, notifications_page
 from apps.departments.views import department_invitations, department_members, department_structure
 from apps.organizations.onboarding_views import (
@@ -47,6 +48,7 @@ urlpatterns = [
         "organizations/<int:org_id>/settings/notifications/", notification_policy_page,
         name="organization-notification-policy",
     ),
+    path("organizations/<int:org_id>/audit/", audit_page, name="organization-audit"),
     path("organizations/", organization_list, name="organization-list"),
     path("organizations/switch/", organization_switch, name="organization-switch"),
     path("organizations/<int:org_id>/members/", organization_members, name="organization-members"),
