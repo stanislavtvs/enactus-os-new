@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+
+{% block title %}Общие настройки — Enactus OS{% endblock %}
+{% block content %}
+    <header class="page-heading">
+        <p class="eyebrow">Учётная запись</p>
+        <h1>Общие настройки</h1>
+        <p>Настройте внешний вид платформы на этом устройстве.</p>
+    </header>
+    <section class="card card-padded" aria-labelledby="appearance-heading">
+        <h2 id="appearance-heading">Оформление</h2>
+        <p class="muted">Системная тема следует настройкам устройства.</p>
+        <div class="overview-info" id="account-theme-settings">
+            {% include "includes/theme_control.html" %}
+            <noscript><p>Для выбора темы включите JavaScript.</p></noscript>
+        </div>
+    </section>
+{% endblock %}

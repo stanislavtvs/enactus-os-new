@@ -1,0 +1,70 @@
+<aside class="sidebar" id="workspace-sidebar" aria-label="Панель навигации">
+    <div class="sidebar-header">
+        <a class="brand" href="{% url 'home' %}">
+            <span class="brand-mark" aria-hidden="true"><svg class="icon"><use href="#icon-brand"/></svg></span>
+            <span class="sidebar-text">Enactus <strong>OS</strong></span>
+        </a>
+        <button class="side-action sidebar-close" id="workspace-sidebar-close" type="button" aria-label="Закрыть навигацию" hidden>
+            <svg class="icon" aria-hidden="true"><use href="#icon-close"/></svg>
+        </button>
+    </div>
+    {% if workspace_choices %}
+        <form method="post" class="workspace-switch" action="{% url 'organization-switch' %}">
+            {% csrf_token %}
+            <label class="side-label" for="workspace-organization">Рабочая область</label>
+            <div class="workspace-switch-controls">
+                <select id="workspace-organization" name="organization_id" required>
+                    {% if not workspace_active %}<option value="" selected disabled>Выберите организацию</option>{% endif %}
+                    {% for choice in workspace_choices %}
+                        <option value="{{ choice.id }}"{% if choice.id == workspace_active.id %} selected{% endif %}>{{ choice.name }}</option>
+                    {% endfor %}
+                </select>
+                <button class="side-action" type="submit" aria-label="Открыть выбранную организацию" title="Открыть организацию">
+                    <svg class="icon" aria-hidden="true"><use href="#icon-arrow"/></svg>
+                </button>
+            </div>
+        </form>
+    {% endif %}
+
+    <nav class="side-nav" aria-label="Организации">
+        <a href="{% url 'organization-list' %}" title="Мои организации"{% if route == 'organization-list' %} class="active" aria-current="page"{% endif %}>
+            <svg class="icon" aria-hidden="true"><use href="#icon-org"/></svg><span class="sidebar-text">Мои организации</span>
+        </a>
+    </nav>
+
+    {% if workspace_links %}
+        <nav class="side-nav side-group" aria-label="Навигация по организации">
+            <p class="side-label">Организация</p>
+            {% for link in workspace_links %}
+                <a href="{{ link.url }}" title="{{ link.label }}"{% if link.active %} class="active" aria-current="location"{% endif %}>
+                    <svg class="icon" aria-hidden="true"><use href="#icon-{{ link.icon }}"/></svg><span class="sidebar-text">{{ link.label }}</span>
+                </a>
+            {% endfor %}
+        </nav>
+    {% endif %}
+
+    <nav class="side-nav side-group" aria-label="Приглашения">
+        <p class="side-label">Входящие</p>
+        <a href="{% url 'organization-invitations' %}" title="Приглашения в организации"{% if route == 'organization-invitations' %} class="active" aria-current="page"{% endif %}>
+            <svg class="icon" aria-hidden="true"><use href="#icon-invite"/></svg><span class="sidebar-text">В организации</span>
+        </a>
+        <a href="{% url 'department-invitations' %}" title="Приглашения в подразделения"{% if route == 'department-invitations' %} class="active" aria-current="page"{% endif %}>
+            <svg class="icon" aria-hidden="true"><use href="#icon-invite"/></svg><span class="sidebar-text">В подразделения</span>
+        </a>
+    </nav>
+
+    <div class="sidebar-footer side-group">
+        <nav class="side-nav" aria-label="Учётная запись">
+            <a href="{% url 'user-profile' %}" title="Профиль"{% if route == 'user-profile' %} class="active" aria-current="page"{% endif %}>
+                <svg class="icon" aria-hidden="true"><use href="#icon-user"/></svg><span class="sidebar-text">Профиль</span>
+            </a>
+            <a href="{% url 'global-settings' %}" title="Общие настройки"{% if route == 'global-settings' %} class="active" aria-current="page"{% endif %}>
+                <svg class="icon" aria-hidden="true"><use href="#icon-settings"/></svg><span class="sidebar-text">Общие настройки</span>
+            </a>
+        </nav>
+        <form method="post" action="{% url 'logout' %}">
+            {% csrf_token %}
+            <button class="side-action" type="submit" title="Выйти"><svg class="icon" aria-hidden="true"><use href="#icon-exit"/></svg><span class="sidebar-text">Выйти</span></button>
+        </form>
+    </div>
+</aside>

@@ -2,35 +2,39 @@
 
 {% block title %}{{ organization.name }} — Enactus OS{% endblock %}
 {% block content %}
-    <nav class="breadcrumbs" aria-label="Путь к странице">
-        <a href="{% url 'organization-list' %}">Мои организации</a>
-    </nav>
     <header class="page-heading">
-        <p class="eyebrow">Рабочая область</p>
+        <p class="eyebrow">Обзор организации</p>
         <h1>{{ organization.name }}</h1>
+        <p>Активные подразделения и доступные данные рабочей области.</p>
     </header>
 
-    <section class="card card-padded" aria-labelledby="organization-info">
+    <div class="overview-grid">
+        <section class="card card-padded overview-card" aria-labelledby="organization-departments-count">
+            <span class="feature-icon" aria-hidden="true"><svg class="icon"><use href="#icon-tree"/></svg></span>
+            <h2 id="organization-departments-count">Подразделения</h2>
+            <p class="overview-value">{{ department_count }}</p>
+        </section>
+        {% if member_count != None %}
+            <section class="card card-padded overview-card" aria-labelledby="organization-members-count">
+                <span class="feature-icon" aria-hidden="true"><svg class="icon"><use href="#icon-users"/></svg></span>
+                <h2 id="organization-members-count">Участники</h2>
+                <p class="overview-value">{{ member_count }}</p>
+            </section>
+        {% endif %}
+        {% if project_count != None %}
+            <section class="card card-padded overview-card" aria-labelledby="organization-projects-count">
+                <span class="feature-icon" aria-hidden="true"><svg class="icon"><use href="#icon-projects"/></svg></span>
+                <h2 id="organization-projects-count">Доступные проекты</h2>
+                <p class="overview-value">{{ project_count }}</p>
+            </section>
+        {% endif %}
+    </div>
+
+    <section class="card card-padded overview-info" aria-labelledby="organization-info">
         <h2 id="organization-info">Об организации</h2>
         <dl class="facts">
             <dt>Дата создания</dt>
             <dd><time datetime="{{ organization.created_at|date:'c' }}">{{ organization.created_at|date:"j E Y" }}</time></dd>
         </dl>
     </section>
-    <p class="form-stack">
-        <a class="button button-primary" href="{% url 'organization-departments' org_id=organization.id %}">Открыть структуру</a>
-    </p>
-    <p class="form-stack">
-        <a class="button button-primary" href="{% url 'organization-access' org_id=organization.id %}">Роли и доступ</a>
-    </p>
-    {% if can_open_projects %}
-        <p class="form-stack">
-            <a class="button button-primary" href="{% url 'organization-projects' org_id=organization.id %}">Проекты</a>
-        </p>
-    {% endif %}
-    {% if can_manage_members %}
-        <p class="form-stack">
-            <a class="button button-primary" href="{% url 'organization-manage' org_id=organization.id %}">Управлять участниками</a>
-        </p>
-    {% endif %}
 {% endblock %}

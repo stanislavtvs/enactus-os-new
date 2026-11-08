@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+
+{% block title %}Участники — {{ organization.name }} — Enactus OS{% endblock %}
+{% block content %}
+    <header class="page-heading">
+        <p class="eyebrow">{{ organization.name }}</p>
+        <h1>Участники</h1>
+        <p>Действующие участники организации.</p>
+    </header>
+    <section class="card card-padded" aria-labelledby="organization-members-heading">
+        <h2 id="organization-members-heading">Список участников</h2>
+        {% if members %}
+            <ul class="member-list" id="organization-members-list" role="list">
+                {% for member in members %}
+                    <li>
+                        <span class="avatar" aria-hidden="true">{{ member.username|slice:":1"|upper }}</span>
+                        <span>{{ member.username }}</span>
+                    </li>
+                {% endfor %}
+            </ul>
+        {% else %}
+            <p class="muted overview-info">Участников пока нет.</p>
+        {% endif %}
+    </section>
+{% endblock %}

@@ -6,6 +6,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>{% block title %}Enactus OS{% endblock %}</title>
     <script src="{% static 'ui/theme.js' %}"></script>
+    <script src="{% static 'ui/workspace.js' %}" defer></script>
     <link rel="stylesheet" href="{% static 'ui/system.css' %}">
     {% block extra_head %}{% endblock %}
 </head>
@@ -14,35 +15,17 @@
     {% include "includes/icons.html" %}
     {% with route=request.resolver_match.url_name %}
         {% if request.user.is_authenticated and route != 'login' %}
-            <div class="app-shell">
-                <aside class="sidebar">
-                    <a class="brand" href="{% url 'home' %}">
-                        <span class="brand-mark" aria-hidden="true"><svg class="icon"><use href="#icon-brand"/></svg></span>
-                        <span>Enactus <strong>OS</strong></span>
-                    </a>
-                    <nav class="side-nav" aria-label="Основная навигация">
-                        <p class="side-label">Рабочая область</p>
-                        <a href="{% url 'home' %}"{% if route == 'home' %} class="active" aria-current="page"{% endif %}>
-                            <svg class="icon" aria-hidden="true"><use href="#icon-home"/></svg> Главная
-                        </a>
-                        <a href="{% url 'organization-list' %}"{% if route == 'organization-list' %} class="active" aria-current="page"{% elif route == 'organization-detail' or route == 'organization-manage' or route == 'organization-departments' or route == 'department-members' %} class="active" aria-current="location"{% endif %}>
-                            <svg class="icon" aria-hidden="true"><use href="#icon-org"/></svg> Организации
-                        </a>
-                        <a href="{% url 'organization-invitations' %}"{% if route == 'organization-invitations' %} class="active" aria-current="page"{% endif %}>
-                            <svg class="icon" aria-hidden="true"><use href="#icon-invite"/></svg> Приглашения в организации
-                        </a>
-                        <a href="{% url 'department-invitations' %}"{% if route == 'department-invitations' %} class="active" aria-current="page"{% endif %}>
-                            <svg class="icon" aria-hidden="true"><use href="#icon-invite"/></svg> Приглашения в подразделения
-                        </a>
-                    </nav>
-                    <form method="post" action="{% url 'logout' %}" class="sidebar-footer">
-                        {% csrf_token %}
-                        <button class="side-action" type="submit"><svg class="icon" aria-hidden="true"><use href="#icon-exit"/></svg> Выйти</button>
-                    </form>
-                </aside>
-                <div class="app-content">
+            <div class="app-shell" id="workspace-shell">
+                {% include "includes/workspace_sidebar.html" %}
+                <div class="sidebar-backdrop" id="workspace-sidebar-backdrop" hidden></div>
+                <div class="app-content" id="workspace-content">
                     <header class="topbar">
-                        <span class="topbar-label">Рабочая область</span>
+                        <div class="topbar-location">
+                            <button class="topbar-toggle" id="workspace-sidebar-toggle" type="button" aria-label="Свернуть боковое меню" aria-controls="workspace-sidebar" aria-expanded="true" hidden>
+                                <svg class="icon" aria-hidden="true"><use href="#icon-menu"/></svg>
+                            </button>
+                            <span class="topbar-label">{{ workspace_page_title|default:"Рабочая область" }}</span>
+                        </div>
                         <div class="topbar-actions">
                             {% include "includes/theme_control.html" %}
                             <span class="account">

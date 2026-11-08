@@ -14,7 +14,7 @@
     </nav>
     <header class="page-heading">
         <p class="eyebrow">{{ organization.name }}</p>
-        <h1>Участники организации</h1>
+        <h1>Приглашения и заявки</h1>
         <p>Управляйте составом, приглашениями и заявками на вступление.</p>
     </header>
 
@@ -31,28 +31,13 @@
             </section>
         {% endif %}
 
-        {% if can_edit_policy or join_link %}
-            <section class="card card-padded" aria-labelledby="organization-policy">
-                <h2 id="organization-policy">Правила вступления</h2>
-                {% if can_edit_policy %}
-                    <form class="form-stack" method="post">
-                        {% csrf_token %}
-                        <input type="hidden" name="action" value="policy">
-                        {% if policy_form.non_field_errors %}<div class="form-errors" role="alert">{{ policy_form.non_field_errors }}</div>{% endif %}
-                        <div class="form-field">
-                            {{ policy_form.policy.label_tag }}
-                            {{ policy_form.policy }}
-                            {% if policy_form.policy.errors %}<div class="form-errors" role="alert">{{ policy_form.policy.errors }}</div>{% endif %}
-                        </div>
-                        <button class="button button-primary" type="submit">Сохранить правила</button>
-                    </form>
-                {% endif %}
-                {% if join_link %}
-                    <div class="form-field onboarding-field">
-                        <label for="join-link">Ссылка для подачи заявки</label>
-                        <input id="join-link" value="{{ join_link }}" readonly autocomplete="off" spellcheck="false">
-                    </div>
-                {% endif %}
+        {% if join_link %}
+            <section class="card card-padded" aria-labelledby="organization-join-link">
+                <h2 id="organization-join-link">Подача заявки</h2>
+                <div class="form-field onboarding-field">
+                    <label for="join-link">Ссылка для подачи заявки</label>
+                    <input id="join-link" value="{{ join_link }}" readonly autocomplete="off" spellcheck="false">
+                </div>
             </section>
         {% endif %}
 

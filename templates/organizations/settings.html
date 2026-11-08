@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Настройки организации — {{ organization.name }} — Enactus OS{% endblock %}
+{% block extra_head %}
+    <link rel="stylesheet" href="{% static 'organizations/onboarding.css' %}">
+{% endblock %}
+
+{% block content %}
+    <header class="page-heading">
+        <p class="eyebrow">{{ organization.name }}</p>
+        <h1>Настройки организации</h1>
+        <p>Выберите, как новые участники могут вступить в организацию.</p>
+    </header>
+    <section class="card card-padded onboarding" aria-labelledby="organization-policy-heading">
+        <h2 id="organization-policy-heading">Правила вступления</h2>
+        {% if error %}<p class="onboarding-notice form-errors" role="alert">{{ error }}</p>{% endif %}
+        <form class="form-stack" id="organization-policy-form" method="post">
+            {% csrf_token %}
+            {% if policy_form.non_field_errors %}<div class="form-errors" role="alert">{{ policy_form.non_field_errors }}</div>{% endif %}
+            <div class="form-field settings-field">
+                {{ policy_form.policy.label_tag }}
+                {{ policy_form.policy }}
+                {% if policy_form.policy.errors %}<div class="form-errors" role="alert">{{ policy_form.policy.errors }}</div>{% endif %}
+            </div>
+            <button class="button button-primary" type="submit">Сохранить правила</button>
+        </form>
+    </section>
+{% endblock %}

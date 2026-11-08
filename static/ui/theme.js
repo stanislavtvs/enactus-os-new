@@ -14,23 +14,25 @@
 
     document.documentElement.dataset.theme = theme;
     document.addEventListener("DOMContentLoaded", () => {
-        const control = document.querySelector("[data-theme-control]");
-        if (!control) {
-            return;
+        const controls = [...document.querySelectorAll("[data-theme-control]")];
+        for (const control of controls) {
+            control.value = theme;
+            control.closest("label").hidden = false;
+            control.addEventListener("change", () => {
+                if (!themes.has(control.value)) {
+                    return;
+                }
+                theme = control.value;
+                document.documentElement.dataset.theme = theme;
+                for (const sibling of controls) {
+                    sibling.value = theme;
+                }
+                try {
+                    localStorage.setItem(storageKey, theme);
+                } catch {
+                    // The current page already uses the selected theme.
+                }
+            });
         }
-
-        control.value = theme;
-        control.closest("label").hidden = false;
-        control.addEventListener("change", () => {
-            if (!themes.has(control.value)) {
-                return;
-            }
-            document.documentElement.dataset.theme = control.value;
-            try {
-                localStorage.setItem(storageKey, control.value);
-            } catch {
-                // The current page already uses the selected theme.
-            }
-        });
     });
 })();

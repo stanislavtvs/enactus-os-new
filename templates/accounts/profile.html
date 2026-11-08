@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+
+{% block title %}Профиль — Enactus OS{% endblock %}
+{% block content %}
+    <header class="page-heading">
+        <p class="eyebrow">Учётная запись</p>
+        <h1>Профиль</h1>
+        <p>Данные вашей учётной записи Enactus OS.</p>
+    </header>
+    <section class="card card-padded" aria-labelledby="profile-heading">
+        <h2 id="profile-heading">Личные данные</h2>
+        <dl class="profile-facts">
+            <div>
+                <dt>Имя пользователя</dt>
+                <dd>{{ profile_user.get_username }}</dd>
+            </div>
+            {% if profile_user.get_full_name %}
+                <div><dt>Имя</dt><dd>{{ profile_user.get_full_name }}</dd></div>
+            {% endif %}
+            {% if profile_user.email %}
+                <div><dt>Электронная почта</dt><dd>{{ profile_user.email }}</dd></div>
+            {% endif %}
+        </dl>
+    </section>
+{% endblock %}

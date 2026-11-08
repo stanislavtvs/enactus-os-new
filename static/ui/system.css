@@ -84,7 +84,7 @@ button:disabled { cursor: wait; }
 .app-shell {
     min-height: 100vh;
     display: grid;
-    grid-template-columns: 15rem minmax(0, 1fr);
+    grid-template-columns: 16.5rem minmax(0, 1fr);
 }
 
 .sidebar, .login-brand {
@@ -97,12 +97,17 @@ button:disabled { cursor: wait; }
     position: sticky;
     top: 0;
     height: 100vh;
+    height: 100dvh;
     display: flex;
     flex-direction: column;
-    padding: 1.35rem 1rem;
-    gap: 2.4rem;
+    overflow: auto;
+    padding: 1rem;
+    gap: var(--space-md);
+    color-scheme: dark;
 }
 
+.sidebar-header { display: flex; justify-content: space-between; align-items: center; gap: var(--space-xs); }
+.sidebar-backdrop { display: none; }
 .brand {
     display: inline-flex;
     align-items: center;
@@ -125,6 +130,24 @@ button:disabled { cursor: wait; }
 }
 
 .side-nav { display: grid; gap: var(--space-xs); }
+.side-group { border-top: 1px solid #454139; padding-top: var(--space-sm); }
+.workspace-switch { display: grid; gap: var(--space-xs); }
+.workspace-switch-controls {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: var(--space-xs);
+}
+.workspace-switch-controls select {
+    width: 100%;
+    min-width: 0;
+    padding: 0.45rem 0.35rem;
+    border: 1px solid #6c6252;
+    border-radius: 0.5rem;
+    background: #302e29;
+    color: #f9f6ee;
+    text-overflow: ellipsis;
+    font-size: 0.85rem;
+}
 .side-label, .eyebrow {
     font-size: 0.72rem;
     font-weight: 750;
@@ -146,15 +169,25 @@ button:disabled { cursor: wait; }
     text-decoration: none;
     font-size: 0.9rem;
     font-weight: 640;
+    overflow-wrap: anywhere;
 }
 
 .side-nav a:hover, .side-action:hover { background: #373632; }
 .side-nav a.active { color: #ffe3a3; background: #423923; }
 .sidebar-footer { margin-top: auto; }
+.sidebar-footer form { margin-top: var(--space-xs); }
 .side-action { color: var(--side-muted); }
+.workspace-switch-controls .side-action, .sidebar-close {
+    justify-content: center;
+    padding: 0.4rem;
+    min-width: 2.3rem;
+}
 
 .app-content { min-width: 0; }
 .topbar {
+    position: sticky;
+    z-index: 2;
+    top: 0;
     display: flex;
     justify-content: space-between;
     align-items: center;
@@ -165,7 +198,27 @@ button:disabled { cursor: wait; }
     background: var(--surface);
 }
 
-.topbar-label { color: var(--muted); font-size: 0.88rem; font-weight: 650; }
+.topbar-location { display: flex; align-items: center; min-width: 0; gap: var(--space-sm); }
+.topbar-label {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--muted);
+    font-size: 0.88rem;
+    font-weight: 650;
+}
+.topbar-toggle {
+    display: grid;
+    flex: none;
+    width: 2.3rem;
+    height: 2.3rem;
+    place-items: center;
+    border: 1px solid var(--line);
+    border-radius: 0.55rem;
+    color: var(--ink);
+    background: var(--surface);
+}
+.topbar-toggle:hover { background: var(--subtle); }
 .topbar-actions, .account { display: flex; align-items: center; gap: 0.55rem; min-width: 0; }
 .account-name {
     max-width: 15ch;
@@ -174,6 +227,27 @@ button:disabled { cursor: wait; }
     white-space: nowrap;
     font-size: 0.85rem;
     font-weight: 650;
+}
+
+@media (min-width: 47.001rem) {
+    .app-shell[data-sidebar="compact"] { grid-template-columns: 4.5rem minmax(0, 1fr); }
+    .app-shell[data-sidebar="compact"] .sidebar { padding-inline: 0.65rem; }
+    .app-shell[data-sidebar="compact"] .workspace-switch,
+    .app-shell[data-sidebar="compact"] .side-label { display: none; }
+    .app-shell[data-sidebar="compact"] .sidebar-text {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        overflow: hidden;
+        clip-path: inset(50%);
+        white-space: nowrap;
+    }
+    .app-shell[data-sidebar="compact"] .brand,
+    .app-shell[data-sidebar="compact"] .side-nav a,
+    .app-shell[data-sidebar="compact"] .side-action {
+        width: 100%;
+        justify-content: center;
+    }
 }
 
 .avatar {
@@ -388,16 +462,26 @@ button:disabled { cursor: wait; }
     .sidebar {
         position: static;
         height: auto;
-        display: grid;
-        grid-template-columns: minmax(0, 1fr) auto;
-        align-items: center;
-        gap: 0.7rem;
         padding: 0.8rem 1rem;
     }
-    .sidebar .brand { grid-column: 1 / -1; }
-    .side-nav { display: flex; flex-wrap: wrap; }
-    .side-label { display: none; }
-    .sidebar-footer { align-self: end; margin: 0; }
+    .app-shell[data-sidebar] .sidebar {
+        position: fixed;
+        z-index: 5;
+        inset: 0 auto 0 0;
+        width: min(19rem, 90vw);
+        height: 100vh;
+        height: 100dvh;
+        overscroll-behavior: contain;
+    }
+    .app-shell[data-sidebar="closed"] .sidebar { visibility: hidden; }
+    .sidebar-backdrop {
+        display: block;
+        position: fixed;
+        z-index: 4;
+        inset: 0;
+        background: #090807a6;
+    }
+    .workspace-drawer-open { overflow: hidden; }
     .topbar { min-height: 3.5rem; }
     .login-brand { gap: 1.4rem; }
     .login-brand-copy { margin-bottom: 0; }
@@ -405,11 +489,34 @@ button:disabled { cursor: wait; }
 }
 
 @media (max-width: 24rem) {
-    .topbar-label { display: none; }
-    .topbar-actions { justify-content: space-between; width: 100%; }
+    .topbar .account { display: none; }
     .workspace-link .workspace-icon { display: none; }
 }
 
 @media (prefers-reduced-motion: reduce) {
     *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
 }
+
+.overview-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(12rem, 100%), 1fr));
+    gap: var(--space-md);
+}
+
+.overview-card h2 { margin-top: var(--space-sm); }
+.overview-value { font-size: clamp(1.6rem, 4vw, 2.6rem); font-weight: 720; line-height: 1.3; }
+.overview-info { margin-top: var(--space-md); }
+.settings-field { max-width: 30rem; }
+.member-list { padding: 0; margin: var(--space-md) 0 0; list-style: none; }
+.member-list li {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    padding-block: var(--space-sm);
+    border-top: 1px solid var(--line);
+    overflow-wrap: anywhere;
+}
+
+.profile-facts { display: grid; gap: var(--space-md); margin-bottom: 0; }
+.profile-facts dt { color: var(--muted); font-size: 0.88rem; }
+.profile-facts dd { margin-inline-start: 0; font-weight: 650; overflow-wrap: anywhere; }
