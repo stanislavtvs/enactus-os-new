@@ -1,5 +1,6 @@
 from django.core.exceptions import PermissionDenied
 from django.db import IntegrityError, transaction
+from django.http import HttpResponse
 from ninja import PatchDict, Query, Router
 from ninja.errors import HttpError
 from ninja.security import django_auth
@@ -33,6 +34,8 @@ from .schemas import (
     StatusInput,
     SubtaskInput,
     SubtaskListOutput,
+    TaskAssigneeOptions,
+    TaskAssigneeOptionsQuery,
     TaskChangeInput,
     TaskInput,
     TaskListOutput,
@@ -237,6 +240,14 @@ def get_task_options(request, org_id: RecordId, task_id: RecordId | None = None)
     return services.task_options(access=access, task_id=task_id)
 
 
+@router.get("/{org_id}/task-assignee-options/", response=TaskAssigneeOptions, url_name="task_assignee_options")
+def get_task_assignee_options(request, response: HttpResponse, org_id: RecordId, scope: Query[TaskAssigneeOptionsQuery]):
+    access = organization_access(user=request.user, org_id=org_id)
+    context = {key: value or None for key, value in scope.model_dump(exclude_unset=True).items()}
+    response["Cache-Control"] = "no-store"
+    return _perform(services.task_assignee_options, access=access, **context)
+
+
 def _distribution_data(entry):
     return {
         "status": entry.status,
@@ -394,6 +405,23 @@ def set_project_review_policy(request, org_id: RecordId, project_id: RecordId, p
     )
 
 
+def _subtask_data(task, access, parent):
+    permissions = services.task_permissions(access=access, task=task)
+    can_move = permissions["update"] and (
+        task.parent_id is None
+        or (parent is not None and decomposition._can_update(access, parent, require_writable=False))
+    )
+    return {
+        "id": task.pk, "name": task.name, "status": task.status,
+        "workflow_status": statuses.task_workflow_status(access, task),
+        "parent_id": parent.pk if parent is not None else None,
+        "assignee": _member_data(task.assignee), "due_at": task.due_at,
+        "is_archived": task.is_archived,
+        "permissions": {key: permissions[key] for key in ("update", "archive")},
+        "can_move": can_move,
+    }
+
+
 @router.get("/{org_id}/tasks/{task_id}/subtasks/", response=SubtaskListOutput)
 def list_subtasks(request, org_id: RecordId, task_id: RecordId, filters: Query[HierarchyQuery]):
     access = organization_access(user=request.user, org_id=org_id)
@@ -401,18 +429,9 @@ def list_subtasks(request, org_id: RecordId, task_id: RecordId, filters: Query[H
         access=access, task_id=task_id, **filters.model_dump(),
     )
     tasks = list(tasks)
-    parents = services.visible_parent_names(access, tasks)
+    parents = services.visible_parent_tasks(access, tasks)
     return {
-        "items": [
-            {
-                "id": task.pk, "name": task.name, "status": task.status,
-                "workflow_status": statuses.task_workflow_status(access, task),
-                "parent_id": task.parent_id if task.parent_id in parents else None,
-                "assignee": _member_data(task.assignee), "due_at": task.due_at,
-                "is_archived": task.is_archived,
-            }
-            for task in tasks
-        ],
+        "items": [_subtask_data(task, access, parents.get(task.parent_id)) for task in tasks],
         "total": total, "completed": completed, "page": filters.page, "page_size": filters.page_size,
     }
 

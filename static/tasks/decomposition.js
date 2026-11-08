@@ -1,4 +1,5 @@
-import {collectionActions, setupDialog, setupDisclosures} from "../ui/collection.js";
+import {collectionActions, confirmArchive, setupDialog, setupDisclosures} from "../ui/collection.js";
+import {setupCreationAssignee} from "./creation-assignee.js";
 import {dateLabel, element, errorMessage, readTaskFields, request, selectOptions, setupPrioritySelect, statuses} from "./shared.js";
 
 const treePageSize = 40;
@@ -25,6 +26,9 @@ export function taskDecomposition(app, {api, base, token, refresh}) {
     const childError = find("#task-subtask-error");
     const childProject = find("#task-child-project");
     const childDepartment = find("#task-child-department");
+    const childAssignee = setupCreationAssignee(childForm, {
+        api: base, project: childProject, department: childDepartment, parentId: app.dataset.taskId,
+    });
     const dialogElement = find("#task-decomposition-dialog");
     const dialog = setupDialog(dialogElement);
     const form = find("#task-decomposition-form");
@@ -106,7 +110,7 @@ export function taskDecomposition(app, {api, base, token, refresh}) {
                     toggle.setAttribute("aria-expanded", String(open));
                     toggle.setAttribute("aria-label", `${open ? "Свернуть" : "Развернуть"}: ${child.name}`);
                 };
-                setExpanded(expanded.get(child.id) ?? true);
+                setExpanded(expanded.get(child.id) ?? depth === 0);
                 toggle.addEventListener("click", () => {
                     expanded.set(child.id, branch.hidden);
                     setExpanded(branch.hidden);
@@ -134,7 +138,18 @@ export function taskDecomposition(app, {api, base, token, refresh}) {
                 facts.push(`Родительская задача №${child.parent_id}`);
             }
             summary.append(taskLink(child.id, child.name), element("p", "task-meta", facts.filter(Boolean).join(" · ")));
-            row.append(summary, collectionActions(child.name, [{label: "Открыть", href: taskUrl(child.id)}]));
+            const href = taskUrl(child.id);
+            const actions = [{label: "Открыть", href}];
+            if (child.permissions?.update) {
+                actions.push({label: "Редактировать", href: href + "#edit"});
+            }
+            if (child.can_move) {
+                actions.push({label: "Переместить", href: href + "#move"});
+            }
+            if (child.permissions?.archive) {
+                actions.push({label: "Архивировать", danger: true, onSelect: () => archiveChild(child)});
+            }
+            row.append(summary, collectionActions(child.name, actions));
         }
 
         tree.replaceChildren(root);
@@ -204,6 +219,48 @@ export function taskDecomposition(app, {api, base, token, refresh}) {
         return row;
     }
 
+    function quickItem(checklist) {
+        const wrapper = element("div", "");
+        const quick = element("form", "task-checklist-quick-form");
+        quick.method = "post";
+        const field = element("div", "form-field");
+        const label = element("label", "visually-hidden", `Новый пункт для чек-листа «${checklist.name}»`);
+        const input = document.createElement("input");
+        input.id = `task-checklist-quick-${checklist.id}`;
+        input.name = "name";
+        input.placeholder = "Новый пункт";
+        input.required = true;
+        label.htmlFor = input.id;
+        field.append(label, input);
+        const submit = element("button", "button collection-secondary task-checklist-quick-submit", "+");
+        submit.type = "submit";
+        submit.setAttribute("aria-label", `Добавить пункт в чек-лист «${checklist.name}»`);
+        submit.title = "Добавить пункт";
+        const quickError = element("p", "form-errors task-checklist-quick-error");
+        quickError.id = `${input.id}-error`;
+        quickError.setAttribute("role", "alert");
+        input.setAttribute("aria-describedby", quickError.id);
+        quick.append(field, submit);
+        wrapper.append(quick, quickError);
+        quick.addEventListener("submit", async (event) => {
+            event.preventDefault();
+            const value = input.value.trim();
+            if (!value || Array.from(value).length > 200) {
+                quickError.textContent = "Введите название длиной от 1 до 200 символов.";
+                input.focus();
+                return;
+            }
+            const saved = await mutate(`${checklistPath(checklist)}items/`, "POST", {name: value}, "Пункт добавлен.", {
+                errorTarget: quickError,
+                focusAfter: () => find(`#${input.id}`),
+            });
+            if (!saved) {
+                input.focus();
+            }
+        });
+        return wrapper;
+    }
+
     function renderChecklists() {
         let count = 0;
         let completed = 0;
@@ -227,7 +284,6 @@ export function taskDecomposition(app, {api, base, token, refresh}) {
             header.append(summary);
             if (details.can_manage) {
                 header.append(collectionActions(checklist.name, [
-                    {label: "Добавить пункт", onSelect: (trigger) => editName("Новый пункт", trigger, `${checklistPath(checklist)}items/`, "POST")},
                     {label: "Переименовать", onSelect: (trigger) => editName("Переименовать чек-лист", trigger, checklistPath(checklist), "PATCH", checklist.name)},
                     {label: "Удалить", danger: true, onSelect: (trigger) => confirmDeletion(
                         trigger, "Удалить чек-лист?", `${checklist.name} и его пункты`, checklistPath(checklist), "Чек-лист удалён.",
@@ -244,6 +300,9 @@ export function taskDecomposition(app, {api, base, token, refresh}) {
                 row.append(items);
             } else {
                 row.append(element("p", "task-meta", "В чек-листе пока нет пунктов."));
+            }
+            if (details.can_manage) {
+                row.append(quickItem(checklist));
             }
             checklistList.append(row);
         }
@@ -312,7 +371,7 @@ export function taskDecomposition(app, {api, base, token, refresh}) {
     }
 
     async function mutate(path, method, payload, message, {
-        errorTarget = error, afterWrite, hrefFrom, focusAfter,
+        errorTarget = error, afterWrite, hrefFrom, focusAfter, endpoint = api,
     } = {}) {
         if (busy) {
             return false;
@@ -322,7 +381,7 @@ export function taskDecomposition(app, {api, base, token, refresh}) {
         error.textContent = "";
         errorTarget.textContent = "";
         try {
-            const result = await request(api + path, method, token, payload);
+            const result = await request(endpoint + path, method, token, payload);
             afterWrite?.();
             await refresh();
             const href = hrefFrom?.(result);
@@ -343,6 +402,19 @@ export function taskDecomposition(app, {api, base, token, refresh}) {
             setBusy(false);
             focus?.focus();
         }
+    }
+
+    async function archiveChild(child) {
+        if (busy || !await confirmArchive(child.name, {
+            heading: "Архивировать подзадачу?",
+            description: `«${child.name}» останется в архиве. Её дочерние задачи сохранятся.`,
+        })) {
+            return;
+        }
+        return mutate("", "DELETE", null, "Подзадача архивирована.", {
+            endpoint: `${base}tasks/${child.id}/`,
+            focusAfter: () => find("#task-subtasks-heading"),
+        });
     }
 
     function reorder(checklist, from, to) {
@@ -433,7 +505,10 @@ export function taskDecomposition(app, {api, base, token, refresh}) {
         }
     }
 
-    function openMove(trigger) {
+    function openMove(trigger = moveButton) {
+        if (busy || !details?.can_move) {
+            return;
+        }
         selectOptions(target, "Без родительской задачи", task.parent ? [[task.parent.id, task.parent.name]] : [], task.parent_id);
         openAction(trigger, {
             heading: "Изменить родительскую задачу", targetLabel: "Родительская задача", parentSearch: true,
@@ -504,6 +579,7 @@ export function taskDecomposition(app, {api, base, token, refresh}) {
             return;
         }
         childForm.reset();
+        childAssignee.reset();
         childError.textContent = "";
         childOptions = null;
         childProject.disabled = true;
@@ -535,6 +611,7 @@ export function taskDecomposition(app, {api, base, token, refresh}) {
             childProject.disabled = false;
             childDepartment.disabled = false;
             submit.disabled = false;
+            childAssignee.refresh();
         } catch (cause) {
             if (version === childVersion && childDialogElement.open) {
                 childOptions = null;
@@ -553,13 +630,22 @@ export function taskDecomposition(app, {api, base, token, refresh}) {
         clearTimeout(searchTimer);
         searchVersion++;
     });
-    childDialogElement.addEventListener("close", () => { childVersion++; });
+    childDialogElement.addEventListener("close", () => {
+        if (!childDialogElement.open) {
+            childVersion++;
+            childAssignee.reset();
+        }
+    });
     more.addEventListener("click", loadMore);
     childButton.addEventListener("click", () => openChild(childButton));
     moveButton.addEventListener("click", () => openMove(moveButton));
     addChecklist.addEventListener("click", () => editName("Новый чек-лист", addChecklist, "checklists/", "POST"));
     demoteButton.addEventListener("click", () => openDemote(demoteButton));
-    childProject.addEventListener("change", () => setChildDepartments());
+    childProject.addEventListener("change", () => {
+        setChildDepartments();
+        childAssignee.refresh();
+    });
+    childDepartment.addEventListener("change", childAssignee.refresh);
 
     form.addEventListener("submit", async (event) => {
         event.preventDefault();
@@ -599,6 +685,10 @@ export function taskDecomposition(app, {api, base, token, refresh}) {
         }
         payload.project_id = childProject.value ? Number(childProject.value) : null;
         payload.department_id = childDepartment.value ? Number(childDepartment.value) : null;
+        const assigneeId = childAssignee.value();
+        if (assigneeId !== null) {
+            payload.assignee_id = assigneeId;
+        }
         childDialog.setBusy(true);
         try {
             await mutate("subtasks/", "POST", payload, "Подзадача создана.", {
@@ -611,5 +701,5 @@ export function taskDecomposition(app, {api, base, token, refresh}) {
         }
     });
 
-    return {panel, load};
+    return {panel, load, openMove};
 }

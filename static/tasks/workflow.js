@@ -126,7 +126,7 @@ export function taskWorkflow(app, {api, token, refresh}) {
         const distributionStatus = find("#task-distribution-status");
         distributionStatus.textContent = distribution.pending
             ? `Ожидает распределения${task.department?.name ? ` · ${task.department.name}` : ""}`
-            : task.assignee ? `Основной исполнитель: ${task.assignee.username}` : "Основной исполнитель не назначен.";
+            : task.assignee ? "Исполнитель назначен." : "Исполнитель не назначен.";
         if (distribution.can_allocate && !distribution.candidates.length) {
             distributionStatus.textContent += task.project
                 ? " Доступных кандидатов нет. Если сотрудник ещё не в проекте, сначала оформите участие в команде проекта."

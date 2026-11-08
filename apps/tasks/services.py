@@ -137,6 +137,14 @@ def visible_parent_names(access, tasks):
     return dict(_visible_rows(access).filter(pk__in=parent_ids).values_list("id", "name"))
 
 
+def visible_parent_tasks(access, tasks):
+    parent_ids = {task.parent_id for task in tasks if task.parent_id is not None}
+    if not parent_ids:
+        return {}
+    rows = _visible_rows(access).filter(pk__in=parent_ids).prefetch_related(None)
+    return {parent.pk: parent for parent in rows}
+
+
 def _task_access_filter(access, rows):
     if access.allows(VIEW):
         return rows
@@ -257,8 +265,12 @@ def _can_assign(access, task):
         and not _has_pending_distribution(task)
         and access.organization.task_assignment_mode == Organization.TaskAssignmentMode.DIRECT
         and access.allows(ASSIGN, _context(task.project, task.department))
-        and (task.project_id is None or task.project.lead_membership_id == access.membership.pk)
+        and _is_direct_project_lead(access, task.project)
     )
+
+
+def _is_direct_project_lead(access, project):
+    return project is None or project.lead_membership_id == access.membership.pk
 
 
 def _task_is_writable(task):
@@ -283,10 +295,14 @@ def task_permissions(*, access, task):
 
 
 def _active_candidates(access, task):
+    return _assignment_candidates(access, task.project)
+
+
+def _assignment_candidates(access, project):
     members = access.organization.memberships.filter(is_active=True, user__is_active=True)
-    if task.project_id is not None:
+    if project is not None:
         members = members.filter(
-            project_memberships__project=task.project, project_memberships__is_active=True,
+            project_memberships__project=project, project_memberships__is_active=True,
         )
     return members
 
@@ -418,10 +434,32 @@ def _managed_task(user, org_id, task_id, action, *, allow_archived=False):
 def create_task(
     *, user, org_id, name, description="", priority=priorities.UNSET, priority_id=priorities.UNSET,
     project_id=INHERIT_SCOPE, department_id=INHERIT_SCOPE, parent_id=None,
-    planned_start_at=None, due_at=None,
+    planned_start_at=None, due_at=None, assignee_id=None,
 ):
     access = organization_access(user=user, org_id=org_id, lock=True)
-    parent = _parent_for_change(access, parent_id, require_writable=True)
+    parent, project, department = _creation_context(
+        access, project_id=project_id, department_id=department_id, parent_id=parent_id, lock=True,
+    )
+    if not _can_create(access, project, department):
+        raise PermissionDenied
+    _validate_dates(planned_start_at, due_at)
+    level = priorities.resolve_task_priority(access.organization, priority=priority, priority_id=priority_id)
+    initial_status = statuses.default_statuses(access).get(Task.Status.PENDING)
+    if initial_status is None:
+        raise TaskConflict("Для начального этапа нет действующего статуса по умолчанию.")
+    task = access.organization.tasks.create(
+        name=name, description=description, priority=priorities.legacy_priority_code(level),
+        priority_level=level, project=project,
+        department=department, parent=parent, created_by=access.membership, workflow_status=initial_status,
+        planned_start_at=planned_start_at, due_at=due_at,
+    )
+    if assignee_id is not None:
+        task = set_assignee(user=user, org_id=org_id, task_id=task.pk, assignee_id=assignee_id)
+    return task
+
+
+def _creation_context(access, *, project_id, department_id, parent_id, lock):
+    parent = _parent_for_change(access, parent_id, require_writable=True, lock=lock)
     if project_id is INHERIT_SCOPE:
         project_id = parent.project_id if parent else None
     if department_id is INHERIT_SCOPE:
@@ -438,25 +476,36 @@ def create_task(
         if project.is_archived:
             raise TaskConflict("Нельзя добавить задачу в архивный проект.")
     department = _active_department(access, department_id)
-    if not _can_create(access, project, department):
-        raise PermissionDenied
-    _validate_dates(planned_start_at, due_at)
-    level = priorities.resolve_task_priority(access.organization, priority=priority, priority_id=priority_id)
-    initial_status = statuses.default_statuses(access).get(Task.Status.PENDING)
-    if initial_status is None:
-        raise TaskConflict("Для начального этапа нет действующего статуса по умолчанию.")
-    return access.organization.tasks.create(
-        name=name, description=description, priority=priorities.legacy_priority_code(level),
-        priority_level=level, project=project,
-        department=department, parent=parent, created_by=access.membership, workflow_status=initial_status,
-        planned_start_at=planned_start_at, due_at=due_at,
+    return parent, project, department
+
+
+def task_assignee_options(
+    *, access, project_id=INHERIT_SCOPE, department_id=INHERIT_SCOPE, parent_id=None,
+):
+    _, project, department = _creation_context(
+        access, project_id=project_id, department_id=department_id, parent_id=parent_id, lock=False,
     )
+    assignment_mode = access.organization.task_assignment_mode
+    can_assign = (
+        assignment_mode == Organization.TaskAssignmentMode.DIRECT
+        and _can_create(access, project, department)
+        and access.allows(ASSIGN, _context(project, department))
+        and _is_direct_project_lead(access, project)
+    )
+    candidates = []
+    if can_assign:
+        candidates = [
+            {"id": member_id, "username": username}
+            for member_id, username in _assignment_candidates(access, project)
+            .order_by("id").values_list("id", "user__username")
+        ]
+    return {"assignment_mode": assignment_mode, "can_assign": can_assign, "candidates": candidates}
 
 
-def _parent_for_change(access, parent_id, *, require_writable):
+def _parent_for_change(access, parent_id, *, require_writable, lock=True):
     if parent_id is None:
         return None
-    parent = get_object_or_404(_task_rows(access, lock=True), pk=parent_id)
+    parent = get_object_or_404(_task_rows(access, lock=lock), pk=parent_id)
     if not _task_visible(access, parent):
         raise Http404
     if not access.allows(UPDATE, _context(parent.project, parent.department)):
@@ -537,7 +586,7 @@ def archive_task(*, user, org_id, task_id):
 
 def _assignable_task(user, org_id, task_id):
     access, task = _managed_task(user, org_id, task_id, ASSIGN)
-    if task.project_id is not None and task.project.lead_membership_id != access.membership.pk:
+    if not _is_direct_project_lead(access, task.project):
         raise PermissionDenied
     if access.organization.task_assignment_mode != Organization.TaskAssignmentMode.DIRECT:
         raise TaskConflict("Организация использует назначение через подразделение.")

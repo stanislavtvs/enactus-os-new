@@ -213,7 +213,7 @@ HTML-формы отправляют изменения методом POST с C
 | Метод | Маршрут | Запрос и успешный ответ |
 |---|---|---|
 | GET | `/tasks/` | HTTP 200, страница списка. |
-| POST | `/tasks/` | Обязательное `name`. Необязательные `description`, `priority_id` или `priority`, `project_id`, `department_id`, `planned_start_at`, `due_at`. HTTP 201, задача. |
+| POST | `/tasks/` | Обязательное `name`. Необязательные `description`, `priority_id` или `priority`, `project_id`, `department_id`, `parent_id`, `planned_start_at`, `due_at`, `assignee_id`. HTTP 201, задача. |
 | GET | `{task}/` | HTTP 200, задача. |
 | PATCH | `{task}/` | Изменяемые поля `name`, `description`, `priority_id` или `priority`, `department_id`, `planned_start_at`, `due_at`. HTTP 200, задача. |
 | DELETE | `{task}/` | HTTP 204, задача архивирована. |
@@ -222,12 +222,17 @@ HTML-формы отправляют изменения методом POST с C
 | DELETE | `{task}/collaborators/{membership_id}/` | HTTP 204, соисполнение прекращено. |
 | PUT | `{task}/status/` | Например, `{"status":"in_progress"}`. HTTP 200, задача. |
 | GET | `/task-options/` | Необязательный query-параметр `task_id`. HTTP 200, варианты для формы. |
+| GET | `/task-assignee-options/` | Необязательные query-параметры `project_id`, `department_id`, `parent_id`. HTTP 200, варианты назначения при создании. |
 
 Ответ списка содержит `items`, `total`, `page` и `page_size`. Задачи отсортированы по убыванию идентификатора. Параметры запроса: `q` (поиск по названию и описанию), `status`, `project_id`, `department_id`, `mine`, `include_archived`, `distribution_pending`, `queue`, `page` (с 1), `page_size` (от 1 до 100, по умолчанию 20). По умолчанию архивные задачи скрыты. Для списка проекта или подразделения укажите соответствующий идентификатор. `mine=true` возвращает задачи, в которых пользователь основной исполнитель или активный соисполнитель. `distribution_pending=true` оставляет задачи с ожидающим распределением. Для очереди распределения задайте `queue=distribution`, для очереди проверки — `queue=review`.
 
 Ответ задачи содержит `id`, `name`, `description`, `status`, `priority`, `planned_start_at`, `due_at`, `completed_at`, `created_at`, `updated_at`, `is_archived`, `distribution_pending`, `author`, `assignee`, `collaborators`, `project`, `department`, `permissions` и `allowed_statuses`. Люди представлены идентификатором членства и `username`, проект и подразделение — полями `id` и `name`. В `permissions` возвращаются флаги `update`, `assign`, `archive` и `change_status`. Для имени допустимы 1–200 символов после удаления пробелов по краям. Необязательные даты и подразделение можно очистить через `null`.
 
 Варианты формы содержат `assignment_mode`, `current_membership_id`, `can_create_standalone`, `can_clear_department`, `departments`, `projects` и `assignees`. Подразделения содержат `id`, `name`, `can_create`, `can_update`. Проекты содержат `id`, `name`, `can_create` и `department_ids`, где возможно создание задачи. Кандидаты `assignees` выдаются только для видимой задачи при действующем праве назначения.
+
+`GET /task-assignee-options/` возвращает `{assignment_mode,can_assign,candidates}` для будущей задачи с заголовком `Cache-Control: no-store`. Каждый кандидат содержит `id` членства в организации и `username`. При указанном `parent_id` пропущенные `project_id` и `department_id` наследуются от родителя. Архивное подразделение родителя пропускается. Значение `0` в одном из этих query-параметров явно выбирает отсутствие проекта или подразделения. Для указанного родителя нужны доступ на чтение и право изменения. При допустимой области без права прямого назначения возвращаются `can_assign=false` и пустой список. Отсутствие права изменения видимого родителя даёт HTTP 403, чужой или скрытый объект — HTTP 404, архивная область — HTTP 409.
+
+`assignee_id` в `POST /tasks/` и `POST {task}/subtasks/` задаёт основного исполнителя в той же транзакции, что и создание. Пропущенное поле или `null` создаёт задачу без исполнителя. Сервер проверяет режим организации, полномочия и действующее членство кандидата по тем же правилам, что при назначении в существующей задаче. При ошибке назначения новая задача и запись истории не сохраняются.
 
 Чужая, отсутствующая или скрытая запись даёт HTTP 404. Недостаток прав на видимую задачу и ошибка CSRF дают HTTP 403. Конфликт состояния, включая попытку изменить архивную задачу, назначение в режиме `department`, недопустимый переход или повторное добавление соисполнителя, даёт HTTP 409. Ошибки схемы и порядок дат дают HTTP 422.
 
@@ -278,7 +283,7 @@ HTML-формы отправляют изменения методом POST с C
 | POST | `{checklist}/items/{item_id}/convert/` | `{"confirm":true}`. HTTP 201, новая подзадача. |
 | POST | `{task}/convert-to-item/` | `{"checklist_id":123,"confirm":true}` с чек-листом родительской задачи. HTTP 201, новый пункт. |
 
-Страница дерева содержит `items`, `total`, `completed`, `page` и `page_size`. Подзадача представлена полями `id`, `parent_id`, `name`, `status`, `assignee`, `due_at` и `is_archived`. Порядок — по возрастанию идентификатора, размер страницы от 1 до 100, по умолчанию 50. Счётчики относятся к доступным потомкам.
+Страница дерева содержит `items`, `total`, `completed`, `page` и `page_size`. Подзадача представлена полями `id`, `parent_id`, `name`, `status`, `workflow_status`, `assignee`, `due_at`, `is_archived`, `permissions` с флагами `update` и `archive`, а также `can_move`. Порядок — по возрастанию идентификатора, размер страницы от 1 до 100, по умолчанию 50. Счётчики относятся к доступным потомкам.
 
 Обычная задача теперь содержит `parent_id`, `parent`, `can_view_decomposition` и `has_unfinished_children`. Последний флаг отмечает наличие незавершённых прямых подзадач вне архива и служит для предупреждения при закрытии родителя. Создание через `POST /tasks/` также допускает `parent_id`. Если при создании подзадачи проект или подразделение не переданы, они наследуются от родителя. Явное `null` отменяет наследование этого поля. Просмотр родителя и подзадач проверяется отдельно. Идентификатор и название скрытого родителя не выдаются.
 

@@ -139,7 +139,7 @@ class TaskTests(TestCase):
         self.assertEqual(
             write(self.client, "post", self.task_list, {"name": "No bypass", "assignee_id": self.assignee_member.pk})
             .status_code,
-            422,
+            409,
         )
         task.refresh_from_db()
         self.assertEqual(task.due_at, datetime.fromisoformat(due))

@@ -116,6 +116,7 @@
                         <select id="task-create-department" name="department_id"></select>
                     </div>
                 </div>
+                {% include "tasks/create_assignee.html" with field_prefix="task-create" %}
                 <p id="task-create-error" class="form-errors" role="alert"></p>
                 <div class="collection-dialog-actions">
                     <button class="button collection-secondary" type="button" data-dialog-close>Отмена</button>

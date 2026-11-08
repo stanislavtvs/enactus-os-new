@@ -14,68 +14,52 @@
         <span aria-hidden="true"> / </span>
         <a href="{{ task_list_url }}">Задачи</a>
     </nav>
-    <header class="page-heading">
-        <p class="eyebrow">{{ organization.name }} · Задачи</p>
-        <h1 id="task-heading" tabindex="-1">Задача</h1>
-        <p id="task-parent-context" hidden></p>
-    </header>
 
     <noscript><p>Включите JavaScript, чтобы загрузить задачу.</p></noscript>
-    <div id="task-app" class="workspace-grid tasks-page" data-org-url="{{ api_org_url }}"
+    <div id="task-app" class="workspace-grid tasks-page task-detail" data-org-url="{{ api_org_url }}"
          data-task-id="{{ task_id }}" data-org-name="{{ organization.name }}" data-task-list-url="{{ task_list_url }}">
         {% csrf_token %}
+        <header class="page-heading collection-header task-detail-heading">
+            <div>
+                <p class="eyebrow">{{ organization.name }} · Задачи</p>
+                <h1 id="task-heading" tabindex="-1">Задача</h1>
+                <p id="task-parent-context" hidden></p>
+            </div>
+            <div id="task-main-actions"></div>
+        </header>
         <div class="task-notices">
             <p id="task-load-status" class="muted" role="status"></p>
             <p id="task-error" class="form-errors" role="alert"></p>
-            <button id="task-retry" type="button" class="button task-secondary" hidden>Обновить задачу</button>
+            <button id="task-retry" type="button" class="button collection-secondary" hidden>Обновить задачу</button>
         </div>
 
-        <section class="card card-padded" id="task-info" aria-labelledby="task-info-heading" hidden>
-            <h2 id="task-info-heading">О задаче</h2>
-            <dl id="task-facts" class="task-fields task-facts"></dl>
-            <p id="task-info-description" class="task-description"></p>
-            <p id="task-status-reason" class="task-meta task-gap"></p>
-            <div class="task-actions task-gap">
-                <form id="task-status-form" class="task-actions" method="post" hidden>
-                    <div class="form-field">
-                        <label for="task-change-status">Новый статус</label>
-                        <select id="task-change-status" required></select>
-                    </div>
-                    <button class="button button-primary" type="submit">Изменить статус</button>
-                </form>
-                <button class="button task-secondary" id="task-archive" type="button" hidden>Архивировать задачу</button>
-            </div>
+        <section id="task-info" class="task-preview" aria-label="Сведения о задаче" hidden>
+            <dl id="task-facts" class="task-fields task-facts task-preview-facts"></dl>
+            <p id="task-status-reason" class="task-meta task-warning"></p>
+
+            <details id="task-extra-details" class="task-inline-disclosure">
+                <summary>Описание и детали</summary>
+                <p id="task-info-description" class="task-description task-gap"></p>
+                <dl id="task-extra-facts" class="task-fields task-facts"></dl>
+            </details>
+            <details id="task-people" class="task-inline-disclosure">
+                <summary id="task-people-heading">Соисполнители</summary>
+                <p id="task-collaborators-empty" class="muted task-gap" hidden>Соисполнителей пока нет.</p>
+                <ul id="task-collaborators" class="task-people-chips" role="list"></ul>
+            </details>
         </section>
 
         {% include "tasks/workflow.html" %}
         {% include "tasks/decomposition.html" %}
         {% include "tasks/dependencies.html" %}
 
-        <section class="card card-padded" id="task-people" aria-labelledby="task-people-heading" hidden>
-            <h2 id="task-people-heading">Исполнители</h2>
-            <p id="task-current-assignee" class="task-gap"></p>
-            <form id="task-assignee-form" method="post" class="form-stack" hidden>
-                <div class="form-field">
-                    <label for="task-assignee">Основной исполнитель</label>
-                    <select id="task-assignee" name="assignee_id"></select>
-                </div>
-                <button class="button button-primary" type="submit">Сохранить исполнителя</button>
-            </form>
-
-            <h3>Соисполнители</h3>
-            <p id="task-collaborators-empty" class="muted" hidden>Соисполнителей пока нет.</p>
-            <ul id="task-collaborators" class="task-list" role="list"></ul>
-            <form id="task-collaborator-form" method="post" class="form-stack" hidden>
-                <div class="form-field">
-                    <label for="task-collaborator">Добавить соисполнителя</label>
-                    <select id="task-collaborator" name="collaborator_id" required></select>
-                </div>
-                <button class="button button-primary" type="submit">Добавить соисполнителя</button>
-            </form>
-        </section>
-
-        <section class="card card-padded" id="task-edit-panel" aria-labelledby="task-edit-heading" hidden>
-            <h2 id="task-edit-heading">Редактировать задачу</h2>
+        <dialog class="collection-dialog" id="task-edit-panel" aria-labelledby="task-edit-heading">
+            <header class="collection-dialog-header">
+                <h2 id="task-edit-heading">Редактировать задачу</h2>
+                <button class="button collection-secondary" type="button" data-dialog-close aria-label="Закрыть форму">
+                    <svg class="icon" aria-hidden="true"><use href="#icon-close"/></svg>
+                </button>
+            </header>
             <form id="task-edit-form" class="form-stack" method="post">
                 {% include "tasks/fields.html" %}
                 <div class="form-field" id="task-edit-department-field" hidden>
@@ -83,8 +67,60 @@
                     <select id="task-edit-department" name="department_id"></select>
                 </div>
                 <p id="task-edit-error" class="form-errors" role="alert"></p>
-                <button class="button button-primary" type="submit">Сохранить задачу</button>
+                <div class="collection-dialog-actions">
+                    <button class="button collection-secondary" type="button" data-dialog-close>Отмена</button>
+                    <button class="button button-primary" type="submit">Сохранить задачу</button>
+                </div>
             </form>
-        </section>
+        </dialog>
+
+        <dialog class="collection-dialog" id="task-status-dialog" aria-labelledby="task-status-dialog-heading">
+            <header class="collection-dialog-header">
+                <h2 id="task-status-dialog-heading">Изменить статус</h2>
+                <button class="button collection-secondary" type="button" data-dialog-close aria-label="Закрыть форму">
+                    <svg class="icon" aria-hidden="true"><use href="#icon-close"/></svg>
+                </button>
+            </header>
+            <form id="task-status-form" class="form-stack" method="post">
+                <div class="form-field">
+                    <label for="task-change-status">Новый статус</label>
+                    <select id="task-change-status" required></select>
+                </div>
+                <p id="task-status-error" class="form-errors" role="alert"></p>
+                <div class="collection-dialog-actions">
+                    <button class="button collection-secondary" type="button" data-dialog-close>Отмена</button>
+                    <button class="button button-primary" type="submit">Изменить статус</button>
+                </div>
+            </form>
+        </dialog>
+
+        <dialog class="collection-dialog" id="task-people-dialog" aria-labelledby="task-people-dialog-heading">
+            <header class="collection-dialog-header">
+                <h2 id="task-people-dialog-heading">Исполнитель и соисполнители</h2>
+                <button class="button collection-secondary" type="button" data-dialog-close aria-label="Закрыть форму">
+                    <svg class="icon" aria-hidden="true"><use href="#icon-close"/></svg>
+                </button>
+            </header>
+            <p id="task-current-assignee" class="task-gap"></p>
+            <form id="task-assignee-form" method="post" class="task-people-form task-gap" hidden>
+                <div class="form-field">
+                    <label for="task-assignee">Основной исполнитель</label>
+                    <select id="task-assignee" name="assignee_id"></select>
+                </div>
+                <button class="button button-primary" type="submit">Сохранить исполнителя</button>
+            </form>
+
+            <h3 class="task-gap">Соисполнители</h3>
+            <ul id="task-collaborator-edit-list" class="task-list" role="list"></ul>
+            <form id="task-collaborator-form" method="post" class="task-people-form task-gap" hidden>
+                <div class="form-field">
+                    <label for="task-collaborator">Добавить соисполнителя</label>
+                    <select id="task-collaborator" name="collaborator_id" required></select>
+                </div>
+                <button class="button button-primary" type="submit">Добавить соисполнителя</button>
+            </form>
+            <p id="task-people-notice" class="muted task-gap" role="status"></p>
+            <p id="task-people-error" class="form-errors task-gap" role="alert"></p>
+        </dialog>
     </div>
 {% endblock %}

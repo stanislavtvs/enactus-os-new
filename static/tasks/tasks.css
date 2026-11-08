@@ -136,3 +136,46 @@
     overflow-wrap: anywhere;
 }
 .task-permission-options input { flex: none; }
+
+.task-detail { gap: var(--space-sm); }
+.task-detail-heading { align-items: start; flex-wrap: nowrap; margin-bottom: 0; }
+.task-detail-heading h1 { font-size: clamp(1.8rem, 4vw, 3rem); }
+.task-detail-heading #task-main-actions { flex: none; padding-top: 0.3rem; }
+.task-detail-heading #task-main-actions:empty { display: none; }
+.task-preview { padding-block: 0 var(--space-md); border-bottom: 1px solid var(--line); }
+.task-preview-facts {
+    grid-template-columns: repeat(auto-fit, minmax(min(8.5rem, 100%), 1fr));
+    gap: var(--space-sm) var(--space-md);
+    margin: 0 0 var(--space-sm);
+}
+.task-inline-disclosure { padding-block: var(--space-xs); }
+.task-inline-disclosure summary { width: fit-content; max-width: 100%; cursor: pointer; font-weight: 650; }
+.task-inline-disclosure .task-facts { margin-bottom: 0; }
+.task-warning:not(:empty) { margin-block: var(--space-sm); }
+.task-warning-critical { color: var(--error); }
+.task-people-chips { display: flex; flex-wrap: wrap; gap: var(--space-xs); padding: 0; list-style: none; }
+.task-people-chips:empty { display: none; }
+.task-people-chips li { overflow-wrap: anywhere; max-width: 100%; }
+.task-people-form { display: flex; flex-wrap: wrap; gap: var(--space-xs) var(--space-sm); align-items: end; }
+.task-people-form .form-field { flex: 1 1 13rem; min-width: 0; }
+.task-detail > .card, .task-detail > #task-decomposition > .card {
+    padding: var(--space-sm) 0 var(--space-md);
+    border: 0;
+    border-bottom: 1px solid var(--line);
+    border-radius: 0;
+    background: transparent;
+}
+.task-detail #task-decomposition { gap: var(--space-sm); }
+.task-detail > .task-notices:not(:has(button:not([hidden]))):not(:has(p:not(:empty))),
+.task-detail #task-decomposition > :is(.collection-feedback, .form-errors):empty {
+    margin-bottom: calc(-1 * var(--space-sm));
+}
+.task-checklist-quick-form { display: flex; flex-wrap: wrap; align-items: end; gap: var(--space-xs); margin-top: var(--space-sm); }
+.task-checklist-quick-form .form-field { flex: 1 1 12rem; min-width: 0; max-width: 26rem; }
+.task-checklist-quick-form button { flex: none; }
+.task-checklist-quick-submit { min-width: 2.75rem; font-size: 1.2rem; }
+.task-checklist-quick-error:not(:empty) { margin-top: var(--space-xs); }
+
+@media (max-width: 26rem) {
+    .task-preview-facts { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}

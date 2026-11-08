@@ -1,3 +1,4 @@
+import {setupCreationAssignee} from "./creation-assignee.js";
 import {collectionRow, confirmArchive, setupCollection, setupDialog} from "../ui/collection.js";
 import {dateLabel, deadlineState, errorMessage, priorities, priorityChip, readTaskFields, request, selectOptions, setupPrioritySelect, statuses, workflowStatusChip} from "./shared.js";
 
@@ -31,6 +32,9 @@ const form = document.querySelector("#task-create-form");
 const createProject = document.querySelector("#task-create-project");
 const createDepartment = document.querySelector("#task-create-department");
 const createError = document.querySelector("#task-create-error");
+const creationAssignee = setupCreationAssignee(form, {
+    api, project: createProject, department: createDepartment,
+});
 
 setupCollection(app, results, "enactus-tasks-view");
 const dialog = setupDialog(createPanel, createOpen);
@@ -270,6 +274,10 @@ form.addEventListener("submit", async (event) => {
     }
     payload.project_id = createProject.value ? Number(createProject.value) : null;
     payload.department_id = createDepartment.value ? Number(createDepartment.value) : null;
+    const assigneeId = creationAssignee.value();
+    if (assigneeId !== null) {
+        payload.assignee_id = assigneeId;
+    }
     dialog.setBusy(true);
     try {
         const task = await request(`${api}tasks/`, "POST", token, payload);
@@ -308,6 +316,16 @@ for (const filter of [statusFilter, workflowStatusFilter, projectFilter, departm
 }
 previous.addEventListener("click", () => { page--; load(); });
 next.addEventListener("click", () => { page++; load(); });
-createProject.addEventListener("change", updateCreateDepartments);
+createOpen.addEventListener("click", creationAssignee.refresh);
+createPanel.addEventListener("close", () => {
+    if (!createPanel.open) {
+        creationAssignee.reset();
+    }
+});
+createProject.addEventListener("change", () => {
+    updateCreateDepartments();
+    creationAssignee.refresh();
+});
+createDepartment.addEventListener("change", creationAssignee.refresh);
 retry.addEventListener("click", () => options ? load() : initialize());
 initialize();

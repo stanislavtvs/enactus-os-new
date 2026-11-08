@@ -61,6 +61,7 @@
                 <select id="task-child-department" name="department_id"></select>
             </div>
         </div>
+        {% include "tasks/create_assignee.html" with field_prefix="subtask" %}
         <p id="task-subtask-error" class="form-errors" role="alert"></p>
         <div class="collection-dialog-actions">
             <button class="button collection-secondary" type="button" data-dialog-close>Отмена</button>

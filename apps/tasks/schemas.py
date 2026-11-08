@@ -44,6 +44,7 @@ class TaskChangeInput(Schema):
 
 class SubtaskInput(TaskChangeInput):
     project_id: InputId | None = None
+    assignee_id: InputId | None = None
 
 
 class TaskInput(SubtaskInput):
@@ -289,6 +290,11 @@ class ParentInput(Schema):
     parent_id: InputId | None
 
 
+class SubtaskPermissions(Schema):
+    update: bool
+    archive: bool
+
+
 class SubtaskOutput(Schema):
     id: int
     parent_id: int | None
@@ -298,6 +304,8 @@ class SubtaskOutput(Schema):
     assignee: MemberOutput | None
     due_at: datetime | None
     is_archived: bool
+    permissions: SubtaskPermissions
+    can_move: bool
 
 
 class SubtaskListOutput(Schema):
@@ -432,6 +440,18 @@ class TaskOptions(Schema):
     assignees: list[MemberOutput]
     priorities: list[TaskPriorityOutput]
     statuses: list[TaskStatusOutput]
+
+
+class TaskAssigneeOptionsQuery(Schema):
+    project_id: Annotated[int, Field(ge=0, le=2**63 - 1)] | None = None
+    department_id: Annotated[int, Field(ge=0, le=2**63 - 1)] | None = None
+    parent_id: RecordId | None = None
+
+
+class TaskAssigneeOptions(Schema):
+    assignment_mode: Organization.TaskAssignmentMode
+    can_assign: bool
+    candidates: list[MemberOutput]
 
 
 ReviewPolicy = Literal["project", "department", "department_project"]
