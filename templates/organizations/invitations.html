@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Мои приглашения — Enactus OS{% endblock %}
+{% block extra_head %}
+    <link rel="stylesheet" href="{% static 'organizations/onboarding.css' %}">
+    <script type="module" src="{% static 'organizations/invitations.js' %}"></script>
+{% endblock %}
+
+{% block content %}
+    <header class="page-heading">
+        <p class="eyebrow">Рабочие области</p>
+        <h1>Мои приглашения</h1>
+        <p>Здесь отображаются приглашения, адресованные вашей учётной записи.</p>
+    </header>
+
+    <div class="workspace-grid onboarding">
+        {% if error %}<p class="onboarding-notice form-errors" role="alert">{{ error }}</p>{% endif %}
+        <section class="card card-padded" id="invitation-link-panel" aria-labelledby="invitation-link-heading" hidden>
+            <h2 id="invitation-link-heading">Приглашение по ссылке</h2>
+            <p class="muted">Ответьте на приглашение, которое открыли по ссылке.</p>
+            <form class="onboarding-actions onboarding-field" id="invitation-link-form" method="post">
+                {% csrf_token %}
+                <input type="hidden" name="token">
+                <button class="button button-primary" type="submit" name="decision" value="accept">Принять приглашение по ссылке</button>
+                <button class="button button-secondary" type="submit" name="decision" value="decline">Отклонить приглашение по ссылке</button>
+            </form>
+        </section>
+        <section class="card card-padded" aria-labelledby="pending-invitations">
+            <h2 id="pending-invitations">Ожидают ответа</h2>
+            {% if invitations %}
+                <p class="onboarding-notice">У вас есть новые приглашения.</p>
+                <ul class="onboarding-list">
+                    {% for invitation in invitations %}
+                        <li class="onboarding-row">
+                            <div>
+                                <p class="onboarding-name">{{ invitation.organization.name }}</p>
+                                <p class="muted">Действует до <time datetime="{{ invitation.expires_at|date:'c' }}">{{ invitation.expires_at|date:"j E Y, H:i" }}</time></p>
+                            </div>
+                            <form class="onboarding-actions" method="post">
+                                {% csrf_token %}
+                                <input type="hidden" name="invitation_id" value="{{ invitation.id }}">
+                                <button class="button button-primary" type="submit" name="decision" value="accept" aria-label="Принять приглашение в {{ invitation.organization.name }}">Принять</button>
+                                <button class="button button-secondary" type="submit" name="decision" value="decline" aria-label="Отклонить приглашение в {{ invitation.organization.name }}">Отклонить</button>
+                            </form>
+                        </li>
+                    {% endfor %}
+                </ul>
+            {% else %}
+                <p class="muted">Ожидающих ответа приглашений нет.</p>
+            {% endif %}
+        </section>
+    </div>
+{% endblock %}

@@ -17,4 +17,9 @@
             <dd><time datetime="{{ organization.created_at|date:'c' }}">{{ organization.created_at|date:"j E Y" }}</time></dd>
         </dl>
     </section>
+    {% if can_manage_members %}
+        <p class="form-stack">
+            <a class="button button-primary" href="{% url 'organization-manage' org_id=organization.id %}">Управлять участниками</a>
+        </p>
+    {% endif %}
 {% endblock %}

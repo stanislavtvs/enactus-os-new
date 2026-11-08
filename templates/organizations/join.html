@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Заявка на вступление — Enactus OS{% endblock %}
+{% block extra_head %}
+    <link rel="stylesheet" href="{% static 'organizations/onboarding.css' %}">
+{% endblock %}
+
+{% block content %}
+    <header class="page-heading">
+        <p class="eyebrow">Рабочие области</p>
+        <h1>Заявка на вступление</h1>
+    </header>
+
+    <section class="card card-padded onboarding" aria-labelledby="join-organization">
+        <h2 id="join-organization">{{ organization.name }}</h2>
+        {% if error %}<p class="onboarding-notice form-errors" role="alert">{{ error }}</p>{% endif %}
+        {% if is_member %}
+            <p class="onboarding-notice" role="status">Вы уже состоите в этой организации.</p>
+            <p><a href="{% url 'organization-detail' organization.id %}">Открыть организацию</a></p>
+        {% elif submitted %}
+            <p class="onboarding-notice" role="status">Ваша заявка отправлена и ожидает рассмотрения.</p>
+            <p><a href="{% url 'organization-list' %}">Вернуться к моим организациям</a></p>
+        {% else %}
+            <p class="muted">Уполномоченный участник организации рассмотрит вашу заявку.</p>
+            <form class="form-stack" method="post">
+                {% csrf_token %}
+                <button class="button button-primary" type="submit">Подать заявку</button>
+            </form>
+        {% endif %}
+    </section>
+{% endblock %}

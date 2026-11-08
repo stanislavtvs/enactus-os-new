@@ -1,0 +1,65 @@
+.onboarding .muted {
+    margin-top: var(--space-xs);
+    font-size: 0.9rem;
+}
+
+.onboarding-field {
+    margin-top: var(--space-md);
+}
+
+.onboarding .form-field select {
+    width: 100%;
+    min-height: 2.75rem;
+    padding: 0.55rem 0.7rem;
+    border: 1px solid var(--input-line);
+    border-radius: 0.55rem;
+    background: var(--surface);
+    color: var(--ink);
+}
+
+.onboarding-list {
+    padding: 0;
+    margin: var(--space-md) 0 0;
+    list-style: none;
+}
+
+.onboarding-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-sm) var(--space-md);
+    padding: var(--space-sm) 0;
+    border-top: 1px solid var(--line);
+    overflow-wrap: anywhere;
+}
+
+.onboarding-name {
+    font-weight: 650;
+}
+
+.onboarding-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-xs);
+}
+
+.onboarding .button-secondary {
+    border-color: var(--line);
+    background: var(--surface);
+    color: var(--ink);
+}
+
+.onboarding .button-secondary:hover {
+    background: var(--subtle);
+}
+
+.onboarding-notice {
+    padding: var(--space-sm) var(--space-md);
+    border-radius: 0.6rem;
+    background: var(--subtle);
+}
+
+.card > .onboarding-notice {
+    margin: var(--space-sm) 0;
+}

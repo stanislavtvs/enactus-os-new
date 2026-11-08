@@ -1,0 +1,153 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Участники — {{ organization.name }} — Enactus OS{% endblock %}
+{% block extra_head %}
+    <link rel="stylesheet" href="{% static 'organizations/onboarding.css' %}">
+{% endblock %}
+
+{% block content %}
+    <nav class="breadcrumbs" aria-label="Путь к странице">
+        <a href="{% url 'organization-list' %}">Мои организации</a>
+        <span aria-hidden="true"> / </span>
+        <a href="{% url 'organization-detail' organization.id %}">{{ organization.name }}</a>
+    </nav>
+    <header class="page-heading">
+        <p class="eyebrow">{{ organization.name }}</p>
+        <h1>Участники организации</h1>
+        <p>Управляйте составом, приглашениями и заявками на вступление.</p>
+    </header>
+
+    <div class="workspace-grid onboarding">
+        {% if error %}<p class="onboarding-notice form-errors" role="alert">{{ error }}</p>{% endif %}
+        {% if invitation_link %}
+            <section class="card card-padded" aria-labelledby="invitation-created">
+                <h2 id="invitation-created">Приглашение создано</h2>
+                <p class="muted">Передайте ссылку указанному пользователю. Приглашение также появится в его личном списке.</p>
+                <div class="form-field onboarding-field">
+                    <label for="invitation-link">Ссылка на приглашение</label>
+                    <input id="invitation-link" value="{{ invitation_link }}" readonly autocomplete="off" spellcheck="false">
+                </div>
+            </section>
+        {% endif %}
+
+        {% if can_edit_policy or join_link %}
+            <section class="card card-padded" aria-labelledby="organization-policy">
+                <h2 id="organization-policy">Правила вступления</h2>
+                {% if can_edit_policy %}
+                    <form class="form-stack" method="post">
+                        {% csrf_token %}
+                        <input type="hidden" name="action" value="policy">
+                        {% if policy_form.non_field_errors %}<div class="form-errors" role="alert">{{ policy_form.non_field_errors }}</div>{% endif %}
+                        <div class="form-field">
+                            {{ policy_form.policy.label_tag }}
+                            {{ policy_form.policy }}
+                            {% if policy_form.policy.errors %}<div class="form-errors" role="alert">{{ policy_form.policy.errors }}</div>{% endif %}
+                        </div>
+                        <button class="button button-primary" type="submit">Сохранить правила</button>
+                    </form>
+                {% endif %}
+                {% if join_link %}
+                    <div class="form-field onboarding-field">
+                        <label for="join-link">Ссылка для подачи заявки</label>
+                        <input id="join-link" value="{{ join_link }}" readonly autocomplete="off" spellcheck="false">
+                    </div>
+                {% endif %}
+            </section>
+        {% endif %}
+
+        <section class="card card-padded" aria-labelledby="organization-members">
+            <h2 id="organization-members">Состав</h2>
+            <ul class="onboarding-list">
+                {% for member in members %}
+                    <li class="onboarding-row">
+                        <div>
+                            <p class="onboarding-name">{{ member.user.get_username }}</p>
+                            <p class="muted">
+                                {% if member.user_id == organization.owner_id %}Владелец
+                                {% elif member.can_manage_members %}Управляет участниками
+                                {% else %}Участник{% endif %}
+                            </p>
+                        </div>
+                        {% if can_edit_policy and member.user_id != organization.owner_id %}
+                            <form method="post">
+                                {% csrf_token %}
+                                <input type="hidden" name="action" value="manager">
+                                <input type="hidden" name="membership_id" value="{{ member.id }}">
+                                {% if member.can_manage_members %}
+                                    <button class="button button-secondary" type="submit" name="enabled" value="no" aria-label="Отозвать права управления у {{ member.user.get_username }}">Отозвать права</button>
+                                {% else %}
+                                    <button class="button button-secondary" type="submit" name="enabled" value="yes" aria-label="Выдать права управления для {{ member.user.get_username }}">Выдать права</button>
+                                {% endif %}
+                            </form>
+                        {% endif %}
+                    </li>
+                {% empty %}
+                    <li class="onboarding-row muted">Участников пока нет.</li>
+                {% endfor %}
+            </ul>
+        </section>
+
+        <section class="card card-padded" aria-labelledby="organization-invites">
+            <h2 id="organization-invites">Приглашения</h2>
+            {% if invite_form %}
+                <form class="form-stack" method="post">
+                    {% csrf_token %}
+                    <input type="hidden" name="action" value="invite">
+                    {% if invite_form.non_field_errors %}<div class="form-errors" role="alert">{{ invite_form.non_field_errors }}</div>{% endif %}
+                    <div class="form-field">
+                        {{ invite_form.username.label_tag }}
+                        {{ invite_form.username }}
+                        {% if invite_form.username.errors %}<div class="form-errors" role="alert">{{ invite_form.username.errors }}</div>{% endif %}
+                    </div>
+                    <button class="button button-primary" type="submit">Пригласить пользователя</button>
+                </form>
+            {% endif %}
+            <ul class="onboarding-list">
+                {% for invitation in invitations %}
+                    <li class="onboarding-row">
+                        <div>
+                            <p class="onboarding-name">{{ invitation.recipient.get_username }}</p>
+                            <p class="muted">{{ invitation.get_status_display }} · до <time datetime="{{ invitation.expires_at|date:'c' }}">{{ invitation.expires_at|date:"j E Y, H:i" }}</time></p>
+                        </div>
+                        {% if invitation.status == 'pending' %}
+                            <form method="post">
+                                {% csrf_token %}
+                                <input type="hidden" name="action" value="revoke">
+                                <input type="hidden" name="invitation_id" value="{{ invitation.id }}">
+                                <button class="button button-secondary" type="submit" aria-label="Отозвать приглашение для {{ invitation.recipient.get_username }}">Отозвать</button>
+                            </form>
+                        {% endif %}
+                    </li>
+                {% empty %}
+                    <li class="onboarding-row muted">Приглашений пока нет.</li>
+                {% endfor %}
+            </ul>
+        </section>
+
+        <section class="card card-padded" aria-labelledby="organization-requests">
+            <h2 id="organization-requests">Заявки на вступление</h2>
+            <ul class="onboarding-list">
+                {% for join_request in join_requests %}
+                    <li class="onboarding-row">
+                        <div>
+                            <p class="onboarding-name">{{ join_request.applicant.get_username }}</p>
+                            <p class="muted">{{ join_request.get_status_display }}</p>
+                        </div>
+                        {% if join_request.status == 'pending' %}
+                            <form class="onboarding-actions" method="post">
+                                {% csrf_token %}
+                                <input type="hidden" name="action" value="review">
+                                <input type="hidden" name="request_id" value="{{ join_request.id }}">
+                                <button class="button button-primary" type="submit" name="decision" value="approve" aria-label="Одобрить заявку от {{ join_request.applicant.get_username }}">Одобрить</button>
+                                <button class="button button-secondary" type="submit" name="decision" value="reject" aria-label="Отклонить заявку от {{ join_request.applicant.get_username }}">Отклонить</button>
+                            </form>
+                        {% endif %}
+                    </li>
+                {% empty %}
+                    <li class="onboarding-row muted">Заявок пока нет.</li>
+                {% endfor %}
+            </ul>
+        </section>
+    </div>
+{% endblock %}

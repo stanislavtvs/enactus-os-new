@@ -4,6 +4,7 @@ from django.conf import settings
 from ninja import NinjaAPI, Schema
 
 from apps.organizations.api import router as organizations_router
+from apps.organizations.onboarding_api import router as onboarding_router
 
 
 class HealthResponse(Schema):
@@ -17,6 +18,7 @@ api = NinjaAPI(
     openapi_url="/openapi.json" if settings.DEBUG else None,
 )
 
+api.add_router("/organizations", onboarding_router)
 api.add_router("/organizations", organizations_router)
 
 
