@@ -13,6 +13,7 @@ from django.http import Http404
 from django.utils import timezone as django_timezone
 
 from apps.access.services import organization_access
+from apps.organizations.modules import CALENDAR
 from apps.notifications.producers import calendar_recipients, emit
 
 from .audit import calendar_action
@@ -427,7 +428,7 @@ def recurrence_detail(*, access, event_id):
 
 
 def _editable_event(user, org_id, event_id, action=UPDATE):
-    access = organization_access(user=user, org_id=org_id, lock=True)
+    access = organization_access(user=user, org_id=org_id, lock=True, module=CALENDAR)
     event = visible_event(access=access, event_id=event_id, lock=True)
     if not _allows(access, action, event.project, event.department):
         raise PermissionDenied

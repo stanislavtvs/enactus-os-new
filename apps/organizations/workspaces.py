@@ -11,6 +11,7 @@ from apps.tasks.reviews import can_open_review_inbox
 from apps.tasks.services import can_open_tasks
 
 from .models import Organization
+from .modules import enabled
 from .services import visible_organizations
 
 ACTIVE_WORKSPACE_KEY = "active_workspace_id"
@@ -39,6 +40,7 @@ SCOPED_ROUTES = {
     "organization-staffing-request",
     "organization-manage",
     "organization-settings",
+    "organization-modules",
     "organization-notification-policy",
 }
 
@@ -72,6 +74,7 @@ PAGE_TITLES = {
     "organization-access": "Роли и доступ",
     "organization-manage": "Управление вступлением",
     "organization-settings": "Настройки организации",
+    "organization-modules": "Модули",
     "ownership-inbox": "Предложения о передаче владения",
     "organization-invitations": "Приглашения в организации",
     "department-invitations": "Приглашения в подразделения",
@@ -131,9 +134,9 @@ def _workspace_links(request, workspace, route):
         ("organization-calendar", "Календарь", "calendar", can_open_calendar(access), ()),
         (
             "organization-calendar-invitations", "Мои приглашения на мероприятия", "invite",
-            True, ("organization-calendar-invitation",),
+            enabled(workspace, "calendar"), ("organization-calendar-invitation",),
         ),
-        ("organization-my-tasks", "Мои задачи", "user", True, ()),
+        ("organization-my-tasks", "Мои задачи", "user", enabled(workspace, "tasks"), ()),
         ("organization-task-distribution", "Распределение задач", "arrow", can_open_distribution(access), ()),
         ("organization-task-reviews", "Проверка задач", "invite", can_open_review_inbox(access), ()),
         ("organization-task-configuration", "Рабочие процессы", "settings", can_view_configuration(access), ()),
@@ -144,6 +147,7 @@ def _workspace_links(request, workspace, route):
         ),
         ("organization-audit", "Журнал действий", "org", can_open_audit(access), ()),
         ("organization-settings", "Настройки организации", "settings", access.is_owner, ()),
+        ("organization-modules", "Модули", "settings", access.allows(Permission.MODULES_MANAGE), ()),
         ("organization-notification-policy", "Уведомления организации", "settings",
          access.allows(Permission.NOTIFICATIONS_MANAGE), ()),
     )
@@ -187,6 +191,7 @@ def workspace_navigation(request):
     return {
         "workspace_active": workspace,
         "workspace_choices": list(choices.values()),
+        "workspace_has_staffing": any(enabled(org, "staffing") for org in choices.values()),
         "workspace_links": _workspace_links(request, workspace, route),
         "workspace_page_title": PAGE_TITLES.get(route, "Enactus OS"),
     }

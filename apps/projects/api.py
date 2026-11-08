@@ -65,14 +65,14 @@ def _project_data(project, access):
 @transaction.atomic
 def _changed_project(request, org_id, operation, **kwargs):
     project = _perform(operation, user=request.user, org_id=org_id, **kwargs)
-    access = organization_access(user=request.user, org_id=org_id)
+    access = organization_access(user=request.user, org_id=org_id, module="projects")
     project = services.visible_project(access=access, project_id=project.pk)
     return _project_data(project, access)
 
 
 @router.get("/{org_id}/projects/", response=list[ProjectOutput], url_name="project_list")
 def list_projects(request, org_id: RecordId):
-    access = organization_access(user=request.user, org_id=org_id)
+    access = organization_access(user=request.user, org_id=org_id, module="projects")
     return [_project_data(project, access) for project in services.visible_projects(access=access)]
 
 
@@ -83,7 +83,7 @@ def create_project(request, org_id: RecordId, payload: ProjectInput):
 
 @router.get("/{org_id}/projects/{project_id}/", response=ProjectOutput, url_name="project_detail")
 def get_project(request, org_id: RecordId, project_id: RecordId):
-    access = organization_access(user=request.user, org_id=org_id)
+    access = organization_access(user=request.user, org_id=org_id, module="projects")
     return _project_data(services.visible_project(access=access, project_id=project_id), access)
 
 
@@ -134,5 +134,5 @@ def remove_participating_department(request, org_id: RecordId, project_id: Recor
 
 @router.get("/{org_id}/project-options/", response=ProjectOptions, url_name="project_options")
 def get_project_options(request, org_id: RecordId, project_id: RecordId | None = None):
-    access = organization_access(user=request.user, org_id=org_id)
+    access = organization_access(user=request.user, org_id=org_id, module="projects")
     return services.project_options(access=access, project_id=project_id)

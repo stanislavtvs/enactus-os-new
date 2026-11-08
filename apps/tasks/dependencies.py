@@ -6,12 +6,15 @@ from django.shortcuts import get_object_or_404
 from .models import TaskDependency
 from .services import (
     UPDATE, TaskConflict, _audit_task, _context, _managed_task, _related_audit_scope,
-    _task_is_writable, visible_task,
+    _task_is_writable, filter_enabled_tasks, visible_task,
 )
 
 
 def _rows(access, task):
-    return task.dependencies.filter(organization=access.organization).select_related("predecessor").order_by("id")
+    rows = task.dependencies.filter(organization=access.organization)
+    return filter_enabled_tasks(
+        rows, access.organization, project_field="predecessor__project_id",
+    ).select_related("predecessor").order_by("id")
 
 
 def list_dependencies(*, access, task_id):

@@ -13,6 +13,7 @@ from django.utils import timezone
 
 from apps.access.services import organization_access
 from apps.notifications.producers import calendar_recipients, emit
+from apps.organizations.modules import CALENDAR, PROJECTS, TASKS, enabled, require_module
 from apps.projects.models import ProjectMembership
 from apps.projects.services import _can_view as can_view_project
 from apps.projects.services import _context as project_context
@@ -105,7 +106,8 @@ def _allows(access, action, project, department):
 
 def _can_read(access, project, department):
     return (
-        (project is None or can_view_project(access, project))
+        enabled(access.organization, CALENDAR)
+        and (project is None or (enabled(access.organization, PROJECTS) and can_view_project(access, project)))
         and _allows(access, READ, project, department)
     )
 
@@ -122,7 +124,7 @@ def _can_create(access, project, department):
 def can_open_calendar(access):
     from .invitation_services import has_active_invitation
 
-    return (
+    return enabled(access.organization, CALENDAR) and (
         access.allows(READ)
         or any(
             access.allows(READ, department)
@@ -134,9 +136,10 @@ def can_open_calendar(access):
 
 
 def calendar_filters(*, access):
+    require_module(access.organization, CALENDAR)
     projects = [
         {"id": project.pk, "name": project.name, "can_create": not project.is_archived and _can_create(access, project, None)}
-        for project in visible_projects(access=access)
+        for project in (visible_projects(access=access) if enabled(access.organization, PROJECTS) else ())
     ]
     departments = [
         {"id": department.pk, "name": department.name, "can_create": _can_create(access, None, department)}
@@ -154,7 +157,13 @@ def calendar_filters(*, access):
 def _event_rows(access, *, lock=False):
     from .invitation_services import annotate_invited
 
-    rows = access.organization.calendar_events.select_related(
+    organization = access.organization
+    rows = organization.calendar_events.all()
+    if not enabled(organization, CALENDAR):
+        return rows.none()
+    if not enabled(organization, PROJECTS):
+        rows = rows.filter(project__isnull=True)
+    rows = rows.select_related(
         "department", "project__responsible_department", "recurrence_rule",
     ).annotate(_active_project_member=Exists(ProjectMembership.objects.filter(
         organization=access.organization, project_id=OuterRef("project_id"),
@@ -318,6 +327,9 @@ def list_events(
     *, access, start, end, timezone_name, source=None, project_id=None, department_id=None,
     include_archived=False, include_cancelled=False,
 ):
+    require_module(access.organization, CALENDAR)
+    if project_id is not None:
+        require_module(access.organization, PROJECTS)
     rows = _range_event_items(
         access=access, start=start, end=end, bounds=_date_bounds(start, end, timezone_name),
         timezone_name=timezone_name, source=source, project_id=project_id, department_id=department_id,
@@ -334,7 +346,7 @@ def _feed_rows(*, access, start, end, timezone_name, source, project_id, departm
             project_id=project_id, department_id=department_id, include_archived=include_archived,
             include_cancelled=include_cancelled,
         )
-    if source not in CalendarEvent.Type.values:
+    if source not in CalendarEvent.Type.values and enabled(access.organization, TASKS):
         tasks = visible_task_deadlines(
             access=access, start=bounds[0], end=bounds[1], project_id=project_id,
             department_id=department_id, include_archived=include_archived,
@@ -347,6 +359,9 @@ def calendar_feed(
     *, access, start, end, timezone_name, source=None, project_id=None, department_id=None,
     include_archived=False, include_cancelled=False,
 ):
+    require_module(access.organization, CALENDAR)
+    if project_id is not None:
+        require_module(access.organization, PROJECTS)
     rows = _feed_rows(
         access=access, start=start, end=end, timezone_name=timezone_name, source=source,
         project_id=project_id, department_id=department_id, include_archived=include_archived,
@@ -358,6 +373,7 @@ def calendar_feed(
 def _linked_project(access, project_id):
     if project_id is None:
         return None
+    require_module(access.organization, PROJECTS)
     project = get_object_or_404(
         access.organization.projects.select_related("responsible_department"), pk=project_id,
     )
@@ -408,7 +424,7 @@ def create_event(
 ):
     from .recurrence import install_rule
 
-    access = organization_access(user=user, org_id=org_id, lock=True)
+    access = organization_access(user=user, org_id=org_id, lock=True, module=CALENDAR)
     project = _linked_project(access, project_id)
     department = _linked_department(access, department_id)
     if not _can_create(access, project, department):
@@ -433,7 +449,9 @@ def create_event(
 def update_event(*, user, org_id, event_id, changes):
     from .recurrence import sync_recurrence_timezone, validate_series_schedule_change
 
-    access = organization_access(user=user, org_id=org_id, lock=True)
+    access = organization_access(user=user, org_id=org_id, lock=True, module=CALENDAR)
+    if changes.get("project_id") is not None:
+        require_module(access.organization, PROJECTS)
     event = visible_event(access=access, event_id=event_id, lock=True)
     if (not changes or changes.keys() - {"rsvp_mode"}) and not _allows(access, UPDATE, event.project, event.department):
         raise PermissionDenied
@@ -493,7 +511,7 @@ def update_event(*, user, org_id, event_id, changes):
 
 @transaction.atomic
 def cancel_event(*, user, org_id, event_id):
-    access = organization_access(user=user, org_id=org_id, lock=True)
+    access = organization_access(user=user, org_id=org_id, lock=True, module=CALENDAR)
     event = visible_event(access=access, event_id=event_id, lock=True)
     if not _allows(access, CANCEL, event.project, event.department):
         raise PermissionDenied
@@ -512,7 +530,7 @@ def cancel_event(*, user, org_id, event_id):
 
 @transaction.atomic
 def archive_event(*, user, org_id, event_id):
-    access = organization_access(user=user, org_id=org_id, lock=True)
+    access = organization_access(user=user, org_id=org_id, lock=True, module=CALENDAR)
     event = visible_event(access=access, event_id=event_id, lock=True)
     if not _allows(access, ARCHIVE, event.project, event.department):
         raise PermissionDenied

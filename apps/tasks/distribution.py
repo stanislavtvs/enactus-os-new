@@ -7,6 +7,7 @@ from django.shortcuts import get_object_or_404
 from django.utils import timezone
 
 from apps.access.services import organization_access
+from apps.organizations.modules import TASKS, enabled
 from apps.departments.models import DepartmentMembership
 from apps.notifications.producers import emit, scoped_recipients
 from apps.organizations.models import Organization
@@ -21,6 +22,8 @@ from .services import (
     _task_is_writable,
     _task_rows,
     _task_visible,
+    filter_enabled_tasks,
+    task_scope_enabled,
 )
 
 ROUTE = "tasks.route"
@@ -46,6 +49,8 @@ def _can_read(access, department):
 
 
 def can_open_distribution(access):
+    if not enabled(access.organization, TASKS):
+        return False
     return _can_read(access, None) or any(
         _can_read(access, department)
         for department in access.organization.departments.filter(is_archived=False)
@@ -54,7 +59,8 @@ def can_open_distribution(access):
 
 def can_distribute(access, distribution):
     return (
-        distribution.status == TaskDistribution.Status.PENDING
+        task_scope_enabled(access.organization, distribution.task.project_id)
+        and distribution.status == TaskDistribution.Status.PENDING
         and distribution.department_id is not None and not distribution.department.is_archived
         and _task_is_writable(distribution.task)
         and distribution.task.status == Task.Status.PENDING
@@ -64,7 +70,8 @@ def can_distribute(access, distribution):
 
 
 def _distribution_rows(access):
-    return TaskDistribution.objects.filter(organization=access.organization).select_related(
+    rows = TaskDistribution.objects.filter(organization=access.organization)
+    return filter_enabled_tasks(rows, access.organization, project_field="task__project_id").select_related(
         "task__project", "department", "requested_by__user", "resolved_by__user", "assignee__user",
     )
 
@@ -89,7 +96,7 @@ def pending_distribution_for_reader(access, task):
 
 
 def distribution_inbox(*, user, org_id):
-    access = organization_access(user=user, org_id=org_id)
+    access = organization_access(user=user, org_id=org_id, module=TASKS)
     rows = _distribution_rows(access).filter(
         status=TaskDistribution.Status.PENDING, department__is_archived=False,
         task__is_archived=False, task__status=Task.Status.PENDING, task__assignee__isnull=True,
@@ -159,13 +166,13 @@ def _candidate_rows(access, distribution):
 
 
 def distribution_candidates(*, user, org_id, task_id):
-    access = organization_access(user=user, org_id=org_id)
+    access = organization_access(user=user, org_id=org_id, module=TASKS)
     return _candidate_rows(access, _pending_for_actor(access, task_id))
 
 
 @transaction.atomic
 def distribute_task(*, user, org_id, task_id, assignee_id):
-    access = organization_access(user=user, org_id=org_id, lock=True)
+    access = organization_access(user=user, org_id=org_id, lock=True, module=TASKS)
     distribution = _pending_for_actor(access, task_id, lock=True)
     assignee = get_object_or_404(access.organization.memberships, pk=assignee_id)
     if not _candidate_rows(access, distribution).filter(pk=assignee.pk).exists():

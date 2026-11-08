@@ -7,6 +7,7 @@ from django.shortcuts import get_object_or_404
 from django.utils import timezone
 
 from apps.access.services import organization_access
+from apps.organizations.modules import PROJECTS, TASKS, enabled, require_module
 from apps.audit.producer import affected_ids, record_change, snapshot
 from apps.notifications.producers import emit
 from apps.organizations.models import Organization
@@ -68,9 +69,22 @@ def _related_audit_scope(*tasks):
 
 def can_view_context(access, project=None, department=None):
     return (
-        (project is None or can_view_project(access, project))
+        task_scope_enabled(access.organization, project.pk if project is not None else None)
+        and (project is None or can_view_project(access, project))
         and access.allows(VIEW, _context(project, department))
     )
+
+
+def task_scope_enabled(organization, project_id):
+    return enabled(organization, TASKS) and (project_id is None or enabled(organization, PROJECTS))
+
+
+def filter_enabled_tasks(rows, organization, *, project_field="project_id"):
+    if not enabled(organization, TASKS):
+        return rows.none()
+    if not enabled(organization, PROJECTS):
+        return rows.filter(**{f"{project_field}__isnull": True})
+    return rows
 
 
 def _is_participant(access, task):
@@ -83,7 +97,7 @@ def _is_participant(access, task):
 
 
 def _task_visible(access, task):
-    if access.membership is None:
+    if access.membership is None or not task_scope_enabled(access.organization, task.project_id):
         return False
     if task.project_id is not None:
         if hasattr(task, "_active_project_viewer"):
@@ -98,7 +112,15 @@ def _task_rows(access, *, lock=False):
     unresolved_dependencies = TaskDependency.objects.filter(
         organization=organization, task_id=OuterRef("pk"),
     ).exclude(predecessor__status=Task.Status.COMPLETED)
-    rows = organization.tasks.select_related(
+    unfinished_children = filter_enabled_tasks(
+        Task.objects.filter(organization=organization, parent_id=OuterRef("pk"), is_archived=False),
+        organization,
+    ).exclude(status__in=TERMINAL_STATUSES)
+    visible_dependency_warnings = filter_enabled_tasks(
+        unresolved_dependencies.filter(kind=TaskDependency.Kind.INFORMATIONAL),
+        organization, project_field="predecessor__project_id",
+    )
+    rows = filter_enabled_tasks(organization.tasks.all(), organization).select_related(
         "created_by__user", "assignee__user", "department", "project__responsible_department",
         "reviewer__user", "organization",
         "priority_level", "workflow_status",
@@ -115,15 +137,11 @@ def _task_rows(access, *, lock=False):
         _distribution_pending=Exists(TaskDistribution.objects.filter(
             organization=organization, task_id=OuterRef("pk"), status=TaskDistribution.Status.PENDING,
         )),
-        has_unfinished_children=Exists(Task.objects.filter(
-            organization=organization, parent_id=OuterRef("pk"), is_archived=False,
-        ).exclude(status__in=TERMINAL_STATUSES)),
+        has_unfinished_children=Exists(unfinished_children),
         _strict_dependencies_unresolved=Exists(unresolved_dependencies.filter(
             kind=TaskDependency.Kind.STRICT,
         )),
-        _informational_dependencies_unresolved=Exists(unresolved_dependencies.filter(
-            kind=TaskDependency.Kind.INFORMATIONAL,
-        )),
+        _informational_dependencies_unresolved=Exists(visible_dependency_warnings),
     )
     if lock:
         return rows.select_for_update(of=("self",))
@@ -138,6 +156,7 @@ def _task_rows(access, *, lock=False):
 
 
 def visible_task(*, access, task_id):
+    require_module(access.organization, TASKS)
     task = get_object_or_404(_task_rows(access), pk=task_id)
     if not _task_visible(access, task):
         raise Http404
@@ -152,9 +171,9 @@ def _collaboration_exists(access):
 
 
 def _visible_rows(access, rows=None):
-    if access.membership is None:
-        return access.organization.tasks.none()
-    projects = visible_projects(access=access)
+    if access.membership is None or not enabled(access.organization, TASKS):
+        return (rows if rows is not None else access.organization.tasks).none()
+    projects = visible_projects(access=access) if enabled(access.organization, PROJECTS) else []
     if rows is None:
         rows = _task_rows(access)
     rows = rows.filter(Q(project__isnull=True) | Q(project_id__in=[p.pk for p in projects]))
@@ -270,7 +289,7 @@ def list_tasks(
 
 
 def can_open_tasks(access):
-    if access.membership is None:
+    if access.membership is None or not enabled(access.organization, TASKS):
         return False
     if access.allows(VIEW) or any(
         access.allows(VIEW, department)
@@ -283,7 +302,11 @@ def can_open_tasks(access):
 
 
 def can_open_project_tasks(access, project):
-    if access.membership is None or not can_view_project(access, project):
+    if (
+        access.membership is None
+        or not task_scope_enabled(access.organization, project.pk)
+        or not can_view_project(access, project)
+    ):
         return False
     if access.allows(VIEW, _context(project, None)) or any(
         access.allows(VIEW, department)
@@ -406,9 +429,10 @@ def _manual_stage_conflict(task, target_stage):
 
 
 def task_options(*, access, task_id=None):
+    require_module(access.organization, TASKS)
     task = visible_task(access=access, task_id=task_id) if task_id is not None else None
     departments = list(access.organization.departments.filter(is_archived=False).order_by("id"))
-    projects = visible_projects(access=access)
+    projects = visible_projects(access=access) if enabled(access.organization, PROJECTS) else []
     can_update = task is not None and task_permissions(access=access, task=task)["update"]
     assignees = []
     if task is not None and task_permissions(access=access, task=task)["assign"]:
@@ -462,7 +486,7 @@ def _validate_dates(planned_start_at, due_at):
 
 
 def _managed_task(user, org_id, task_id, action, *, allow_archived=False):
-    access = organization_access(user=user, org_id=org_id, lock=True)
+    access = organization_access(user=user, org_id=org_id, lock=True, module=TASKS)
     task = get_object_or_404(_task_rows(access, lock=True), pk=task_id)
     if not _task_visible(access, task):
         raise Http404
@@ -479,7 +503,7 @@ def create_task(
     project_id=INHERIT_SCOPE, department_id=INHERIT_SCOPE, parent_id=None,
     planned_start_at=None, due_at=None, assignee_id=None,
 ):
-    access = organization_access(user=user, org_id=org_id, lock=True)
+    access = organization_access(user=user, org_id=org_id, lock=True, module=TASKS)
     parent, project, department = _creation_context(
         access, project_id=project_id, department_id=department_id, parent_id=parent_id, lock=True,
     )
@@ -506,6 +530,7 @@ def create_task(
 
 
 def _creation_context(access, *, project_id, department_id, parent_id, lock):
+    require_module(access.organization, TASKS)
     parent = _parent_for_change(access, parent_id, require_writable=True, lock=lock)
     if project_id is INHERIT_SCOPE:
         project_id = parent.project_id if parent else None
@@ -515,6 +540,7 @@ def _creation_context(access, *, project_id, department_id, parent_id, lock):
         )
     project = None
     if project_id is not None:
+        require_module(access.organization, PROJECTS)
         project = get_object_or_404(
             access.organization.projects.select_related("responsible_department"), pk=project_id,
         )

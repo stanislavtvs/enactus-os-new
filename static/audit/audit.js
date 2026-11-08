@@ -24,6 +24,7 @@ const filterOptions = [
     ["department", "departments", "id", "name"],
 ];
 const fieldLabels = {
+    is_enabled: "Модуль включён",
     name: "Название", title: "Название", description: "Описание", due_at: "Срок выполнения",
     deadline: "Срок выполнения", priority: "Приоритет", priority_id: "Приоритет", priority_level_id: "Приоритет",
     status: "Статус", workflow_status_id: "Статус", is_archived: "В архиве", is_active: "Активность",
@@ -186,6 +187,9 @@ function presentDetail(record) {
         if (value) {
             facts.push(fact(label, value));
         }
+    }
+    if (record.action === "organization.module_changed" && record.metadata?.code) {
+        facts.push(fact("Модуль", record.metadata.code));
     }
     for (const [key, label] of Object.entries(detailMetadata)) {
         if (record.metadata?.[key] !== null && record.metadata?.[key] !== undefined) {

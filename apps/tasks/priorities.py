@@ -3,6 +3,7 @@ from django.db import transaction
 from django.shortcuts import get_object_or_404
 
 from apps.access.services import organization_access
+from apps.organizations.modules import TASKS, enabled
 
 from .models import Task, TaskPriority
 
@@ -21,6 +22,8 @@ class PriorityValidation(Exception):
 
 
 def can_view_configuration(access):
+    if not enabled(access.organization, TASKS):
+        return False
     return any(access.allows(permission) for permission in (
         VIEW_CONFIGURATION, MANAGE_PRIORITIES, "tasks.statuses.manage", "tasks.transitions.manage",
     ))
@@ -31,14 +34,14 @@ def available_priorities(organization):
 
 
 def list_priorities(*, user, org_id):
-    access = organization_access(user=user, org_id=org_id)
+    access = organization_access(user=user, org_id=org_id, module=TASKS)
     if not can_view_configuration(access):
         raise PermissionDenied
     return access.allows(MANAGE_PRIORITIES), access.organization.task_priorities.order_by("sort_order", "id")
 
 
 def _manager(user, org_id):
-    access = organization_access(user=user, org_id=org_id, lock=True)
+    access = organization_access(user=user, org_id=org_id, lock=True, module=TASKS)
     if not access.allows(MANAGE_PRIORITIES):
         raise PermissionDenied
     return access.organization

@@ -3,6 +3,7 @@ from django.shortcuts import get_object_or_404
 from django.utils import timezone
 
 from apps.access.services import organization_access
+from apps.organizations.modules import CALENDAR
 
 from .audit import calendar_action
 from . import invitation_services as invitations
@@ -90,7 +91,7 @@ def respond(
     locator = get_object_or_404(
         invitations._own_rows(user).values("organization_id", "event_id"), pk=invitation_id,
     )
-    access = organization_access(user=user, org_id=locator["organization_id"], lock=True)
+    access = organization_access(user=user, org_id=locator["organization_id"], lock=True, module=CALENDAR)
     event = get_object_or_404(
         access.organization.calendar_events.select_for_update(of=("self",)).select_related(
             "organization", "created_by__user", "recurrence_rule",

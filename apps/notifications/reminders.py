@@ -35,7 +35,10 @@ OVERDUE_DELAY = timedelta(minutes=1)
 
 def _task_rows():
     return Task.objects.filter(is_archived=False, due_at__isnull=False).exclude(
-        Q(status__in=(Task.Status.COMPLETED, Task.Status.CANCELLED)) | Q(project__is_archived=True),
+        Q(status__in=(Task.Status.COMPLETED, Task.Status.CANCELLED))
+        | Q(project__is_archived=True)
+        | Q(organization__disabled_modules__contains=["tasks"])
+        | Q(project_id__isnull=False, organization__disabled_modules__contains=["projects"]),
     )
 
 
@@ -166,7 +169,10 @@ def _scan_tasks(organization, policy, ids, now):
 
 
 def _calendar_rows():
-    return CalendarEvent.objects.filter(status=CalendarEvent.Status.SCHEDULED)
+    return CalendarEvent.objects.filter(status=CalendarEvent.Status.SCHEDULED).exclude(
+        Q(organization__disabled_modules__contains=["calendar"])
+        | Q(project_id__isnull=False, organization__disabled_modules__contains=["projects"]),
+    )
 
 
 def _calendar_invitations(rows):

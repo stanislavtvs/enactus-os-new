@@ -7,6 +7,7 @@ from django.utils.timezone import now
 from apps.calendar_app.models import CalendarEvent
 from apps.calendar_app.services import CalendarValidation, can_open_calendar, event_zone, list_events
 from apps.projects.models import Project
+from apps.organizations.modules import enabled
 from apps.tasks.models import Task
 from apps.tasks.reviews import can_open_review_inbox, visible_review_stages
 from apps.tasks.services import TERMINAL_STATUSES, _task_rows, _visible_rows
@@ -45,6 +46,7 @@ def dashboard(access, projects):
         and (event["all_day"] or event["ends_at"] > current)
     ][:PREVIEW_LIMIT]
     return {
+        "tasks_available": enabled(access.organization, "tasks"),
         "review_tasks": [
             stage.task for stage in islice(visible_review_stages(access), PREVIEW_LIMIT)
         ] if can_open_review_inbox(access) else [],

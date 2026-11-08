@@ -12,6 +12,7 @@ from apps.audit.producer import affected_ids, record_change, snapshot
 from apps.departments.models import DepartmentMembership
 from apps.notifications.producers import emit, scoped_recipients
 from apps.organizations.models import Organization
+from apps.organizations.modules import enabled
 
 from .models import ProjectMembership, StaffingAllocation, StaffingRequest
 from .services import _can_view, _context, visible_projects
@@ -66,7 +67,7 @@ def _active_project(project):
 
 
 def can_request_staffing(access, project):
-    return project.organization_id == access.organization.pk and access.membership is not None and (
+    return enabled(access.organization, "staffing") and project.organization_id == access.organization.pk and access.membership is not None and (
         access.is_owner
         or (
             project.lead_membership_id == access.membership.pk
@@ -78,7 +79,8 @@ def can_request_staffing(access, project):
 
 def _department_side(access, request):
     return (
-        request.submitted_at is not None
+        enabled(access.organization, "staffing")
+        and request.submitted_at is not None
         and not request.department.is_archived
         and access.allows(ALLOCATE_PERMISSION, request.department)
     )
@@ -91,7 +93,7 @@ def can_allocate_request(access, request):
 
 
 def can_open_staffing(access):
-    return any(
+    return enabled(access.organization, "staffing") and any(
         access.allows(ALLOCATE_PERMISSION, department)
         for department in access.organization.departments.filter(is_archived=False)
     )
@@ -143,7 +145,7 @@ def can_manage_team(access, project):
 
 
 def get_team(*, user, org_id, project_id):
-    access = organization_access(user=user, org_id=org_id)
+    access = organization_access(user=user, org_id=org_id, module="projects")
     project = _project(access, project_id)
     if not can_view_team(access, project):
         if not _can_view(access, project):
@@ -155,14 +157,14 @@ def get_team(*, user, org_id, project_id):
 
 
 def list_project_requests(*, user, org_id, project_id):
-    access = organization_access(user=user, org_id=org_id)
+    access = organization_access(user=user, org_id=org_id, module="staffing")
     project = _project(access, project_id)
     _require_project_side(access, project)
     return _request_rows(access.organization).filter(project=project)
 
 
 def list_department_requests(*, user, org_id, department_id=None):
-    access = organization_access(user=user, org_id=org_id)
+    access = organization_access(user=user, org_id=org_id, module="staffing")
     departments = access.organization.departments.filter(is_archived=False)
     if department_id is not None:
         department = get_object_or_404(departments, pk=department_id)
@@ -176,7 +178,7 @@ def list_department_requests(*, user, org_id, department_id=None):
 
 
 def get_request(*, user, org_id, request_id):
-    access = organization_access(user=user, org_id=org_id)
+    access = organization_access(user=user, org_id=org_id, module="staffing")
     request = get_object_or_404(_request_rows(access.organization), pk=request_id)
     if not (can_request_staffing(access, request.project) or _department_side(access, request)):
         raise Http404
@@ -209,7 +211,7 @@ def _audit_allocation(user, request, allocation, verb, before=None):
 
 @transaction.atomic
 def create_request(*, user, org_id, project_id, department_id, **fields):
-    access = organization_access(user=user, org_id=org_id, lock=True)
+    access = organization_access(user=user, org_id=org_id, lock=True, module="staffing")
     project = _project(access, project_id, lock=True)
     _require_project_side(access, project)
     _active_project(project)
@@ -230,7 +232,7 @@ def _project_request_to_change(access, request_id):
 
 @transaction.atomic
 def update_request(*, user, org_id, request_id, changes):
-    access = organization_access(user=user, org_id=org_id, lock=True)
+    access = organization_access(user=user, org_id=org_id, lock=True, module="staffing")
     request = _project_request_to_change(access, request_id)
     before = snapshot(request, REQUEST_AUDIT_FIELDS)
     draft = request.status == StaffingRequest.Status.DRAFT
@@ -264,7 +266,7 @@ def update_request(*, user, org_id, request_id, changes):
 
 @transaction.atomic
 def submit_request(*, user, org_id, request_id):
-    access = organization_access(user=user, org_id=org_id, lock=True)
+    access = organization_access(user=user, org_id=org_id, lock=True, module="staffing")
     request = _project_request_to_change(access, request_id)
     if request.status != StaffingRequest.Status.DRAFT:
         raise StaffingConflict("Отправить можно только черновик запроса.")
@@ -303,7 +305,7 @@ def _close_request(request, actor, status, *, comment=""):
 
 @transaction.atomic
 def cancel_request(*, user, org_id, request_id):
-    access = organization_access(user=user, org_id=org_id, lock=True)
+    access = organization_access(user=user, org_id=org_id, lock=True, module="staffing")
     request = _project_request_to_change(access, request_id)
     if request.status != StaffingRequest.Status.DRAFT:
         _open_request(request)
@@ -312,7 +314,7 @@ def cancel_request(*, user, org_id, request_id):
 
 @transaction.atomic
 def reject_request(*, user, org_id, request_id, comment):
-    access = organization_access(user=user, org_id=org_id, lock=True)
+    access = organization_access(user=user, org_id=org_id, lock=True, module="staffing")
     request = _request_record(access, request_id, lock=True)
     _require_department_side(access, request)
     _active_project(request.project)
@@ -366,7 +368,7 @@ def _pending_project_ids(request):
 
 
 def list_candidates(*, user, org_id, request_id):
-    access = organization_access(user=user, org_id=org_id)
+    access = organization_access(user=user, org_id=org_id, module="staffing")
     request = _request_record(access, request_id)
     _require_department_side(access, request)
     _active_project(request.project)
@@ -462,7 +464,7 @@ def _activate_membership(user, request, member):
 
 @transaction.atomic
 def allocate(*, user, org_id, request_id, department_membership_ids):
-    access = organization_access(user=user, org_id=org_id, lock=True)
+    access = organization_access(user=user, org_id=org_id, lock=True, module="staffing")
     request = _request_record(access, request_id, lock=True)
     _require_department_side(access, request)
     _active_project(request.project)
@@ -525,7 +527,7 @@ def _resolve_allocation(user, request, allocation, status):
 
 @transaction.atomic
 def revoke_invitation(*, user, org_id, request_id, allocation_id):
-    access = organization_access(user=user, org_id=org_id, lock=True)
+    access = organization_access(user=user, org_id=org_id, lock=True, module="staffing")
     request = _request_record(access, request_id, lock=True)
     _require_department_side(access, request)
     _active_project(request.project)
@@ -542,7 +544,7 @@ def revoke_invitation(*, user, org_id, request_id, allocation_id):
     return _refresh_request(request, user)
 
 
-def own_invitations(*, user):
+def _recipient_invitations(*, user):
     if not user.is_authenticated or not user.is_active:
         return StaffingAllocation.objects.none()
     return StaffingAllocation.objects.filter(
@@ -554,12 +556,16 @@ def own_invitations(*, user):
     ).order_by("-id")
 
 
+def own_invitations(*, user):
+    return _recipient_invitations(user=user).exclude(organization__disabled_modules__overlap=["staffing", "projects"])
+
+
 @transaction.atomic
 def respond_to_invitation(*, user, allocation_id, accept):
     locator = get_object_or_404(
-        own_invitations(user=user).values("organization_id", "request_id"), pk=allocation_id,
+        _recipient_invitations(user=user).values("organization_id", "request_id"), pk=allocation_id,
     )
-    access = organization_access(user=user, org_id=locator["organization_id"], lock=True)
+    access = organization_access(user=user, org_id=locator["organization_id"], lock=True, module="staffing")
     request = _request_record(access, locator["request_id"], lock=True)
     allocation = get_object_or_404(
         own_invitations(user=user), pk=allocation_id, request=request, organization=access.organization,
@@ -591,7 +597,7 @@ def respond_to_invitation(*, user, allocation_id, accept):
 
 @transaction.atomic
 def end_membership(*, user, org_id, project_id, membership_id):
-    access = organization_access(user=user, org_id=org_id, lock=True)
+    access = organization_access(user=user, org_id=org_id, lock=True, module="projects")
     project = _project(access, project_id, lock=True)
     if not _can_view(access, project):
         raise Http404
@@ -612,7 +618,7 @@ def end_membership(*, user, org_id, project_id, membership_id):
 
 @transaction.atomic
 def set_assignment_mode(*, user, org_id, mode):
-    access = organization_access(user=user, org_id=org_id, lock=True)
+    access = organization_access(user=user, org_id=org_id, lock=True, module="staffing")
     if not access.is_owner:
         raise PermissionDenied
     if mode not in Organization.ProjectAssignmentMode.values:

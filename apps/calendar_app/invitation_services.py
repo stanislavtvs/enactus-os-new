@@ -4,7 +4,7 @@ from functools import cached_property
 
 from django.core.exceptions import PermissionDenied
 from django.db import transaction
-from django.db.models import OuterRef, Prefetch, Subquery
+from django.db.models import OuterRef, Prefetch, Q, Subquery
 from django.http import Http404
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
@@ -12,6 +12,8 @@ from django.utils import timezone
 from apps.access.services import organization_access
 from apps.departments.services import active_department_members, department_actions
 from apps.notifications.producers import emit
+from apps.organizations.modules import CALENDAR, PROJECTS, enabled, require_module
+from apps.organizations.services import visible_organizations
 from apps.organizations.workspaces import can_view_organization_members
 from apps.projects.models import ProjectMembership
 from apps.projects.services import _context as project_context
@@ -62,12 +64,14 @@ def _active_recipients(access):
 
 
 def _recipient_invitations(access):
-    if access.membership is None:
+    organization = access.organization
+    if access.membership is None or not enabled(organization, CALENDAR):
         return CalendarInvitation.objects.none()
-    return CalendarInvitation.objects.filter(
-        organization=access.organization, recipient=access.membership, revoked_at__isnull=True,
+    rows = CalendarInvitation.objects.filter(
+        organization=organization, recipient=access.membership, revoked_at__isnull=True,
         recipient__is_active=True, recipient__user__is_active=True,
     )
+    return rows if enabled(organization, PROJECTS) else rows.filter(event__project__isnull=True)
 
 
 def has_active_invitation(access, event_id=None):
@@ -111,6 +115,8 @@ class AudiencePolicy:
 
     @cached_property
     def projects(self):
+        if not enabled(self.access.organization, PROJECTS):
+            return {}
         return {project.pk: project for project in visible_projects(access=self.access)}
 
     @cached_property
@@ -177,7 +183,7 @@ class AudiencePolicy:
 
 
 def _organizer(user, org_id, event_id, *, manage=False, lock=False, scheduled=False):
-    access = organization_access(user=user, org_id=org_id, lock=lock)
+    access = organization_access(user=user, org_id=org_id, lock=lock, module=CALENDAR)
     event = visible_event(access=access, event_id=event_id, lock=lock)
     permitted = can_manage_invitations(access, event) if manage else _can_invite(access, event)
     if not permitted:
@@ -255,6 +261,7 @@ def _expand(policy, selections):
                 policy.branch(selection.department_id) if selection.include_descendants else [selection.department_id]
             )
         if selection.kind == CalendarAudience.Kind.PROJECT:
+            require_module(access.organization, PROJECTS)
             project = policy.projects.get(selection.project_id)
             if project is None:
                 raise Http404
@@ -357,7 +364,7 @@ def refresh_audience(*, user, org_id, event_id):
         )
         for audience in event.audiences.exclude(kind=CalendarAudience.Kind.MEMBER).select_related("department", "project")
         if not (audience.department_id and audience.department.is_archived)
-        and not (audience.project_id and audience.project.is_archived)
+        and not (audience.project_id and (not enabled(access.organization, PROJECTS) or audience.project.is_archived))
     ]
     expanded = _expand(AudiencePolicy(access), selections) if selections else {}
     return _send_audited_snapshot(access, event, expanded)
@@ -454,12 +461,23 @@ def _own_rows(user):
 def own_invitations(*, user, org_id=None):
     rows = _own_rows(user)
     if org_id is not None:
+        organization = visible_organizations(user).filter(pk=org_id).first()
+        if organization is not None:
+            require_module(organization, CALENDAR)
         rows = rows.filter(organization_id=org_id)
+    rows = rows.exclude(organization__disabled_modules__contains=[CALENDAR]).exclude(
+        Q(organization__disabled_modules__contains=[PROJECTS]) & Q(event__project__isnull=False),
+    )
     return _with_event(rows).order_by("event__starts_at", "pk")
 
 
 def own_invitation_by_id(*, user, invitation_id):
-    return get_object_or_404(_with_event(_own_rows(user)), pk=invitation_id)
+    invitation = get_object_or_404(_with_event(_own_rows(user)), pk=invitation_id)
+    event = invitation.event
+    require_module(event.organization, CALENDAR)
+    if event.project_id is not None and not enabled(event.organization, PROJECTS):
+        raise Http404
+    return invitation
 
 
 def _can_respond(invitation, event):
@@ -519,7 +537,7 @@ def respond_to_invitation(*, user, invitation_id, response, expected_revision, e
     locator = get_object_or_404(
         _own_rows(user).values("organization_id", "event_id"), pk=invitation_id,
     )
-    access = organization_access(user=user, org_id=locator["organization_id"], lock=True)
+    access = organization_access(user=user, org_id=locator["organization_id"], lock=True, module=CALENDAR)
     event = get_object_or_404(
         access.organization.calendar_events.select_for_update(of=("self",)).select_related(
             "organization", "created_by__user",

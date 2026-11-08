@@ -127,7 +127,7 @@ def _invitation_data(item):
 
 @router.get("/{org_id}/projects/{project_id}/team/", response=TeamOutput, url_name="project_team_api")
 def project_team(request, org_id: RecordId, project_id: RecordId):
-    access = organization_access(user=request.user, org_id=org_id)
+    access = organization_access(user=request.user, org_id=org_id, module="projects")
     project = visible_project(access=access, project_id=project_id)
     can_request = staffing.can_request_staffing(access, project)
     can_view_team = staffing.can_view_team(access, project)

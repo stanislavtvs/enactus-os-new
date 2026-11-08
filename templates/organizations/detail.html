@@ -30,6 +30,7 @@
         {% endif %}
     </div>
 
+    {% if tasks_available %}
     <div class="overview-grid overview-info">
         <section class="card card-padded" aria-labelledby="overview-my-tasks">
             <h2 id="overview-my-tasks">Мои задачи</h2>
@@ -65,6 +66,7 @@
         </section>
     </div>
 
+    {% endif %}
     <div class="overview-grid overview-info">
         {% if project_count != None %}
             <section class="card card-padded" aria-labelledby="overview-active-projects">
@@ -78,7 +80,7 @@
             </section>
         {% endif %}
 
-        <section class="card card-padded" aria-labelledby="overview-deadlines">
+        {% if tasks_available %}<section class="card card-padded" aria-labelledby="overview-deadlines">
             <h2 id="overview-deadlines">Ближайшие дедлайны</h2>
             <p class="muted">Сегодня и следующие 6 дней · UTC</p>
             <ul class="member-list" role="list">
@@ -91,6 +93,7 @@
             </ul>
         </section>
 
+        {% endif %}
         {% if calendar_available %}
             <section class="card card-padded" aria-labelledby="overview-events">
                 <h2 id="overview-events">Ближайшие события</h2>

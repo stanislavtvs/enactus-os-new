@@ -7,6 +7,7 @@ from ninja.errors import HttpError
 from ninja.security import django_auth
 
 from apps.access.services import organization_access
+from apps.organizations.modules import CALENDAR
 
 from . import recurrence
 from .recurrence_schemas import (
@@ -56,7 +57,7 @@ def _perform(operation, **kwargs):
 
 @router.get("/{org_id}/events/{event_id}/recurrence/", response=RecurrenceDetail)
 def get_recurrence(request, org_id: RecordId, event_id: RecordId):
-    access = organization_access(user=request.user, org_id=org_id)
+    access = organization_access(user=request.user, org_id=org_id, module=CALENDAR)
     return recurrence.recurrence_detail(access=access, event_id=event_id)
 
 
@@ -70,7 +71,7 @@ def set_recurrence(request, org_id: RecordId, event_id: RecordId, payload: Recur
 
 @router.get("/{org_id}/events/{event_id}/occurrences/", response=OccurrenceList)
 def list_occurrences(request, org_id: RecordId, event_id: RecordId, filters: Query[OccurrenceQuery]):
-    access = organization_access(user=request.user, org_id=org_id)
+    access = organization_access(user=request.user, org_id=org_id, module=CALENDAR)
     event = visible_event(access=access, event_id=event_id, allow_invitation=True)
     occurrences = _perform(
         recurrence.list_occurrences, event=event, start=filters.start, end=filters.end,
@@ -81,7 +82,7 @@ def list_occurrences(request, org_id: RecordId, event_id: RecordId, filters: Que
 
 @router.get("/{org_id}/events/{event_id}/occurrences/{key}/", response=EventOutput)
 def get_occurrence(request, org_id: RecordId, event_id: RecordId, key: date):
-    access = organization_access(user=request.user, org_id=org_id)
+    access = organization_access(user=request.user, org_id=org_id, module=CALENDAR)
     event = visible_event(access=access, event_id=event_id, allow_invitation=True)
     return recurrence.occurrence_item(access, event, recurrence.resolve_occurrence(event, key))
 
@@ -115,7 +116,7 @@ def stop_recurrence(request, org_id: RecordId, event_id: RecordId, payload: Stop
 
 @router.get("/{org_id}/events/{event_id}/recurrence/exceptions/", response=OccurrenceExceptions)
 def list_exceptions(request, org_id: RecordId, event_id: RecordId, filters: Query[ExceptionPageQuery]):
-    access = organization_access(user=request.user, org_id=org_id)
+    access = organization_access(user=request.user, org_id=org_id, module=CALENDAR)
     event = visible_event(access=access, event_id=event_id)
     rows = event.occurrence_exceptions.order_by("occurrence_key")
     offset = (filters.page - 1) * filters.page_size

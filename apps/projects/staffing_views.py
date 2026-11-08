@@ -17,7 +17,7 @@ def _org_api(org_id):
 @login_required
 @require_GET
 def project_team_page(request, org_id, project_id):
-    access = organization_access(user=request.user, org_id=org_id)
+    access = organization_access(user=request.user, org_id=org_id, module="projects")
     project = visible_project(access=access, project_id=project_id)
     if not (
         staffing.can_view_team(access, project)
@@ -37,7 +37,7 @@ def project_team_page(request, org_id, project_id):
 @login_required
 @require_GET
 def organization_staffing_page(request, org_id):
-    access = organization_access(user=request.user, org_id=org_id)
+    access = organization_access(user=request.user, org_id=org_id, module="staffing")
     if not staffing.can_open_staffing(access):
         raise Http404
     return render(request, "staffing/queue.html", {

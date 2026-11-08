@@ -15,11 +15,16 @@ class AccessConflict(Exception):
     """A role change conflicts with the current assignments."""
 
 
-def organization_access(*, user, org_id, lock=False):
+def organization_access(*, user, org_id, lock=False, module=None):
     organizations = visible_organizations(user)
     if lock:
         organizations = organizations.select_for_update(of=("self",))
-    return Access(user, get_object_or_404(organizations, pk=org_id))
+    organization = get_object_or_404(organizations, pk=org_id)
+    if module is not None:
+        from apps.organizations.modules import require_module
+
+        require_module(organization, module)
+    return Access(user, organization)
 
 
 def require_role_read(access):

@@ -65,9 +65,9 @@
         <a href="{% url 'department-invitations' %}" aria-label="Приглашения в подразделения" title="Приглашения в подразделения"{% if route == 'department-invitations' %} class="active" aria-current="page"{% endif %}>
             <svg class="icon" aria-hidden="true"><use href="#icon-invite"/></svg><span class="sidebar-text">В подразделения</span>
         </a>
-        <a href="{% url 'project-invitations' %}" aria-label="Приглашения в проекты" title="Приглашения в проекты"{% if route == 'project-invitations' %} class="active" aria-current="page"{% endif %}>
+        {% if workspace_has_staffing %}<a href="{% url 'project-invitations' %}" aria-label="Приглашения в проекты" title="Приглашения в проекты"{% if route == 'project-invitations' %} class="active" aria-current="page"{% endif %}>
             <svg class="icon" aria-hidden="true"><use href="#icon-projects"/></svg><span class="sidebar-text">В проекты</span>
-        </a>
+        </a>{% endif %}
     </nav>
 
     <div class="sidebar-footer side-group">

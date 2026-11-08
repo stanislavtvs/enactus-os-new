@@ -6,6 +6,7 @@ from django.db.models import F, Q
 
 
 class Permission(models.TextChoices):
+    MODULES_MANAGE = "organizations.modules.manage", "Управлять модулями организации"
     AUDIT_READ_ALL = "audit.read_all", "Просматривать журнал организации"
     AUDIT_READ_SCOPED = "audit.read_scoped", "Просматривать журнал подразделений"
     AUDIT_READ_DETAILS = "audit.read_details", "Просматривать подробности журнала"
@@ -60,6 +61,7 @@ class Permission(models.TextChoices):
 
 
 ORGANIZATION_ONLY = frozenset({
+    Permission.MODULES_MANAGE,
     Permission.AUDIT_READ_ALL,
     Permission.NOTIFICATIONS_MANAGE,
     Permission.ORGANIZATIONS_ONBOARDING_MANAGE, Permission.ROLES_READ, Permission.ROLES_MANAGE,

@@ -34,6 +34,7 @@ MIDDLEWARE = [
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "apps.organizations.workspaces.WorkspaceNavigationMiddleware",
+    "apps.organizations.module_views.ModuleAvailabilityMiddleware",
     "apps.audit.context.AuditOperationMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",

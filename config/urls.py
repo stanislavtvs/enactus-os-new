@@ -7,6 +7,7 @@ from apps.calendar_app.views import organization_calendar, organization_calendar
 from apps.audit.views import audit_page
 from apps.notifications.views import notification_policy_page, notification_preferences_page, notifications_page
 from apps.departments.views import department_invitations, department_members, department_structure
+from apps.organizations.module_views import organization_modules
 from apps.organizations.onboarding_views import (
     organization_invitations,
     organization_join,
@@ -53,6 +54,7 @@ urlpatterns = [
     path("organizations/", organization_list, name="organization-list"),
     path("organizations/switch/", organization_switch, name="organization-switch"),
     path("organizations/<int:org_id>/members/", organization_members, name="organization-members"),
+    path("organizations/<int:org_id>/settings/modules/", organization_modules, name="organization-modules"),
     path("organizations/<int:org_id>/settings/", organization_settings, name="organization-settings"),
     path("accounts/profile/", user_profile, name="user-profile"),
     path("accounts/settings/", global_settings, name="global-settings"),

@@ -6,6 +6,7 @@ from ninja.errors import HttpError
 from ninja.security import django_auth
 
 from apps.access.services import organization_access
+from apps.organizations.modules import CALENDAR
 
 from . import services
 from .schemas import (
@@ -61,20 +62,20 @@ def _event_changes(payload):
 
 @router.get("/{org_id}/calendar/", response=CalendarOutput, url_name="calendar_feed")
 def get_calendar(request, response: HttpResponse, org_id: RecordId, filters: Query[CalendarQuery]):
-    access = organization_access(user=request.user, org_id=org_id)
+    access = organization_access(user=request.user, org_id=org_id, module=CALENDAR)
     response["Cache-Control"] = "no-store"
     return {"items": _perform(services.calendar_feed, access=access, **_filters(filters))}
 
 
 @router.get("/{org_id}/calendar/filters/", response=CalendarFilters, url_name="calendar_filters")
 def get_calendar_filters(request, org_id: RecordId):
-    access = organization_access(user=request.user, org_id=org_id)
+    access = organization_access(user=request.user, org_id=org_id, module=CALENDAR)
     return services.calendar_filters(access=access)
 
 
 @router.get("/{org_id}/events/", response=EventListOutput, url_name="calendar_event_list")
 def list_calendar_events(request, response: HttpResponse, org_id: RecordId, filters: Query[EventQuery]):
-    access = organization_access(user=request.user, org_id=org_id)
+    access = organization_access(user=request.user, org_id=org_id, module=CALENDAR)
     response["Cache-Control"] = "no-store"
     return {"items": _perform(services.list_events, access=access, **_filters(filters))}
 
@@ -88,7 +89,7 @@ def create_calendar_event(request, org_id: RecordId, payload: EventInput):
 
 @router.get("/{org_id}/events/{event_id}/", response=EventOutput, url_name="calendar_event_detail")
 def get_calendar_event(request, response: HttpResponse, org_id: RecordId, event_id: RecordId):
-    access = organization_access(user=request.user, org_id=org_id)
+    access = organization_access(user=request.user, org_id=org_id, module=CALENDAR)
     response["Cache-Control"] = "no-store"
     event = services.visible_event(access=access, event_id=event_id, allow_invitation=True)
     return services.event_item(access, event)

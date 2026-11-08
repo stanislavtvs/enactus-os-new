@@ -8,6 +8,7 @@ from django.views.decorators.http import require_GET, require_http_methods
 
 from apps.access.services import organization_access
 from apps.organizations.models import Organization
+from apps.organizations.modules import enabled, require_module
 from apps.tasks.reviews import can_manage_project_review, set_project_review_policy
 from apps.tasks.services import TaskConflict, can_open_project_tasks, list_tasks
 
@@ -35,7 +36,7 @@ def _project_context(access):
 @login_required
 @require_GET
 def organization_projects(request, org_id):
-    access = organization_access(user=request.user, org_id=org_id)
+    access = organization_access(user=request.user, org_id=org_id, module="projects")
     if not can_open_projects(access):
         raise Http404
     return render(request, "projects/list.html", _project_context(access))
@@ -44,13 +45,14 @@ def organization_projects(request, org_id):
 @login_required
 @require_http_methods(["GET", "POST"])
 def organization_project(request, org_id, project_id):
-    access = organization_access(user=request.user, org_id=org_id)
+    access = organization_access(user=request.user, org_id=org_id, module="projects")
     project = visible_project(access=access, project_id=project_id)
     review_form = None
-    if can_manage_project_review(access, project):
+    if enabled(access.organization, "tasks") and can_manage_project_review(access, project):
         review_form = ProjectTaskReviewForm(initial={"review_policy": project.task_review_policy})
     response_status = 200
     if request.method == "POST":
+        require_module(access.organization, "tasks")
         if review_form is None:
             raise PermissionDenied
         if request.POST.get("action") != "task_review_policy":

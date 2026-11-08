@@ -7,6 +7,7 @@ from django.utils import timezone
 
 from apps.access.policy import Access
 from apps.access.services import organization_access
+from apps.organizations.modules import PROJECTS, TASKS, enabled, require_module
 from apps.audit.producer import record_change, snapshot
 from apps.notifications.producers import emit, scoped_recipients
 from apps.organizations.models import Organization
@@ -27,8 +28,10 @@ from .services import (
     _task_is_writable,
     _task_rows,
     _task_visible,
+    filter_enabled_tasks,
     has_blocking_dependencies,
     require_no_blocking_dependencies,
+    task_scope_enabled,
 )
 
 SUBMIT = "tasks.review.submit"
@@ -72,7 +75,7 @@ def _validate_policy(policy, *, allow_inherit=False):
 
 @transaction.atomic
 def set_organization_review_policy(*, user, org_id, policy):
-    access = organization_access(user=user, org_id=org_id, lock=True)
+    access = organization_access(user=user, org_id=org_id, lock=True, module=TASKS)
     if not can_manage_organization_review(access):
         raise PermissionDenied
     _validate_policy(policy)
@@ -89,7 +92,8 @@ def set_organization_review_policy(*, user, org_id, policy):
 
 @transaction.atomic
 def set_project_review_policy(*, user, org_id, project_id, policy):
-    access = organization_access(user=user, org_id=org_id, lock=True)
+    access = organization_access(user=user, org_id=org_id, lock=True, module=TASKS)
+    require_module(access.organization, PROJECTS)
     project = get_object_or_404(
         access.organization.projects.select_for_update(of=("self",)).select_related("responsible_department"),
         pk=project_id,
@@ -196,7 +200,8 @@ def _stage_specs(task, policy):
 
 
 def _review_stage_rows(access):
-    return TaskReviewStage.objects.filter(organization=access.organization).select_related(
+    rows = TaskReviewStage.objects.filter(organization=access.organization)
+    return filter_enabled_tasks(rows, access.organization, project_field="task__project_id").select_related(
         "task__project__responsible_department", "task__department", "department", "reviewer__user",
         "submission__submitted_by__user", "decision__actor__user",
     )
@@ -224,6 +229,7 @@ def can_decide(access, stage, outcome):
     task = stage.task
     if (
         stage.organization_id != access.organization.pk
+        or not task_scope_enabled(access.organization, task.project_id)
         or task.status != Task.Status.REVIEW or not _task_is_writable(task)
         or access.membership.pk in (stage.submission.submitted_by_id, task.assignee_id)
     ):
@@ -254,7 +260,7 @@ def _can_read_stage(access, stage):
 
 
 def get_review(*, user, org_id, task_id):
-    access = organization_access(user=user, org_id=org_id)
+    access = organization_access(user=user, org_id=org_id, module=TASKS)
     task = get_object_or_404(_task_rows(access), pk=task_id)
     stage = _current_stage(access, task)
     submissions = _review_submissions(access, task)
@@ -266,6 +272,7 @@ def get_review(*, user, org_id, task_id):
 
 
 def visible_workflow_task(*, access, task_id):
+    require_module(access.organization, TASKS)
     task = get_object_or_404(_task_rows(access), pk=task_id)
     if (
         _task_visible(access, task)
@@ -277,6 +284,8 @@ def visible_workflow_task(*, access, task_id):
 
 
 def can_open_review_inbox(access):
+    if not enabled(access.organization, TASKS):
+        return False
     if access.allows(APPROVE) or access.allows(RETURN):
         return True
     return any(
@@ -298,7 +307,7 @@ def visible_review_stages(access):
 
 
 def review_inbox(*, user, org_id):
-    access = organization_access(user=user, org_id=org_id)
+    access = organization_access(user=user, org_id=org_id, module=TASKS)
     return list(visible_review_stages(access))
 
 
@@ -380,7 +389,7 @@ def submit_review(*, user, org_id, task_id, comment, links):
 
 @transaction.atomic
 def decide_review(*, user, org_id, task_id, stage_id, outcome, comment):
-    access = organization_access(user=user, org_id=org_id, lock=True)
+    access = organization_access(user=user, org_id=org_id, lock=True, module=TASKS)
     task = get_object_or_404(_task_rows(access, lock=True), pk=task_id)
     stage = _current_stage(access, task)
     if not _task_visible(access, task) and not _can_read_stage(access, stage):

@@ -1,0 +1,10 @@
+{% extends "base.html" %}
+
+{% block title %}Модуль отключён — Enactus OS{% endblock %}
+{% block content %}
+    <header class="page-heading">
+        <h1>Модуль отключён</h1>
+        <p>Эта функция сейчас недоступна в организации. Сохранённые записи снова станут доступны после включения модуля с учётом ваших прав.</p>
+    </header>
+    <a class="button button-secondary" href="{% url 'organization-list' %}">Мои организации</a>
+{% endblock %}

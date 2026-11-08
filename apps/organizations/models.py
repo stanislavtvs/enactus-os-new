@@ -1,4 +1,5 @@
 from django.conf import settings
+from django.contrib.postgres.fields import ArrayField
 from django.db import models
 from django.db.models import F, Q
 
@@ -60,6 +61,20 @@ class Organization(models.Model):
         choices=JoinPolicy,
         default=JoinPolicy.INVITES,
     )
+    disabled_modules = ArrayField(models.CharField(max_length=24), default=list, blank=True)
+
+    class Meta:
+        constraints = [
+            models.CheckConstraint(
+                condition=Q(disabled_modules__contained_by=["projects", "staffing", "tasks", "calendar"]),
+                name="organization_disabled_modules_valid",
+            ),
+            models.CheckConstraint(
+                condition=~Q(disabled_modules__contains=["projects"])
+                | Q(disabled_modules__contains=["staffing"]),
+                name="organization_disabled_projects_requires_staffing",
+            ),
+        ]
 
     def __str__(self):
         return self.name

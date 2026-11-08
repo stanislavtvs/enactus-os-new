@@ -11,6 +11,7 @@ from django.utils import timezone
 from apps.organizations.models import Organization, OrganizationInvitation, OrganizationMembership
 
 from .models import Notification, NotificationEvent
+from .module_scope import exclude_disabled_events
 
 logger = logging.getLogger(__name__)
 PREJOIN_KIND = "organization.invited"
@@ -119,6 +120,10 @@ def _delivery_gate(event, now):
 def _process_event(event, now):
     if event.delivered_at is not None:
         return event
+    if event.organization.disabled_modules and not exclude_disabled_events(
+        NotificationEvent.objects.filter(pk=event.pk),
+    ).exists():
+        return event
 
     error = None
     try:
@@ -197,7 +202,7 @@ def publish(
 def _retry(limit, *, due_only, now):
     if not 1 <= limit <= 1000:
         raise ValueError("Retry limit must be between 1 and 1000.")
-    rows = NotificationEvent.objects.filter(delivered_at__isnull=True)
+    rows = exclude_disabled_events(NotificationEvent.objects.filter(delivered_at__isnull=True))
     if due_only:
         rows = rows.filter(failed_at__isnull=True).filter(
             Q(next_attempt_at__isnull=True) | Q(next_attempt_at__lte=now),
@@ -207,7 +212,7 @@ def _retry(limit, *, due_only, now):
     delivered = failed = 0
     for _ in range(limit):
         with transaction.atomic():
-            event = rows.exclude(pk__in=attempted).select_for_update(skip_locked=True).first()
+            event = rows.exclude(pk__in=attempted).select_for_update(of=("self",), skip_locked=True).first()
             if event is None:
                 break
             attempted.add(event.pk)
@@ -238,7 +243,7 @@ def retry_pending(limit=100, *, now=None):
 def _recipient_rows(user):
     if not user.is_authenticated or not user.is_active:
         return Notification.objects.none()
-    return Notification.objects.filter(recipient=user)
+    return exclude_disabled_events(Notification.objects.filter(recipient=user), "event__")
 
 
 def _filtered_rows(user, *, category=None, org_id=None):

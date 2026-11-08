@@ -6,6 +6,7 @@ from django.shortcuts import get_object_or_404
 
 from apps.access.policy import ORGANIZATION_ONLY, Permission
 from apps.access.services import organization_access
+from apps.organizations.modules import TASKS
 
 from .models import Task, TaskStatus
 from .priorities import can_view_configuration
@@ -35,21 +36,21 @@ def available_statuses(organization):
 
 
 def list_statuses(*, user, org_id):
-    access = organization_access(user=user, org_id=org_id)
+    access = organization_access(user=user, org_id=org_id, module=TASKS)
     if not can_view_configuration(access):
         raise PermissionDenied
     return access.allows(MANAGE_STATUSES), access.organization.task_statuses.order_by("sort_order", "id")
 
 
 def list_transitions(*, user, org_id):
-    access = organization_access(user=user, org_id=org_id)
+    access = organization_access(user=user, org_id=org_id, module=TASKS)
     if not can_view_configuration(access):
         raise PermissionDenied
     return access.allows(MANAGE_TRANSITIONS), access.organization.task_status_transitions.order_by("id")
 
 
 def _manager(user, org_id, action):
-    access = organization_access(user=user, org_id=org_id, lock=True)
+    access = organization_access(user=user, org_id=org_id, lock=True, module=TASKS)
     if not access.allows(action):
         raise PermissionDenied
     return access.organization

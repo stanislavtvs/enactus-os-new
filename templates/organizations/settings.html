@@ -16,6 +16,11 @@
         <p>Настройте вступление в организацию, включение в проектные команды и назначение задач.</p>
         <a class="button" href="{% url 'organization-notification-policy' org_id=organization.id %}">Уведомления</a>
     </header>
+    <section class="card card-padded" aria-labelledby="organization-modules-heading">
+        <h2 id="organization-modules-heading">Модули</h2>
+        <p>Управляйте доступностью разделов рабочей области. Отключение сохраняет данные.</p>
+        <a class="button button-secondary" href="{% url 'organization-modules' org_id=organization.id %}">Настроить модули</a>
+    </section>
     <section class="card card-padded ownership-panel" id="ownership-app" data-ownership-mode="manage"
              data-api-url="{{ ownership_api_url }}" aria-labelledby="ownership-heading">
         <div class="ownership-header">
@@ -70,6 +75,7 @@
             <button class="button button-primary" type="submit">Сохранить правила</button>
         </form>
     </section>
+    {% if staffing_enabled %}
     <section class="card card-padded onboarding" aria-labelledby="project-assignment-heading">
         <h2 id="project-assignment-heading">Включение в проект</h2>
         <form class="form-stack" id="project-assignment-mode-form" method="post">
@@ -84,6 +90,8 @@
             <button class="button button-primary" type="submit">Сохранить способ включения</button>
         </form>
     </section>
+    {% endif %}
+    {% if tasks_enabled %}
     <section class="card card-padded onboarding" aria-labelledby="task-assignment-heading">
         <h2 id="task-assignment-heading">Назначение задач</h2>
         <p>В режиме «Через подразделение» направьте задачу в очередь ответственного подразделения.</p>
@@ -111,4 +119,5 @@
             <button class="button button-primary" type="submit">Сохранить маршрут проверки</button>
         </form>
     </section>
+    {% endif %}
 {% endblock %}

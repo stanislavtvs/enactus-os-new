@@ -6,6 +6,7 @@ from django.shortcuts import get_object_or_404
 
 from apps.access.policy import Permission
 from apps.access.services import organization_access
+from apps.organizations.modules import enabled, require_module
 from apps.audit.producer import affected_ids, record_change, snapshot
 
 from .models import Project, ProjectDepartmentLink, ProjectMembership
@@ -27,7 +28,7 @@ def _context(project):
 
 
 def _can_view(access, project):
-    if project.organization_id != access.organization.pk:
+    if not enabled(access.organization, "projects") or project.organization_id != access.organization.pk:
         return False
     if access.allows(Permission.PROJECTS_VIEW, _context(project)):
         return True
@@ -68,10 +69,13 @@ def _projects(access):
 
 
 def visible_projects(*, access):
+    if not enabled(access.organization, "projects"):
+        return []
     return [project for project in _projects(access).order_by("id") if _can_view(access, project)]
 
 
 def visible_project(*, access, project_id):
+    require_module(access.organization, "projects")
     project = get_object_or_404(_projects(access), pk=project_id)
     _require_view(access, project)
     return project
@@ -86,6 +90,8 @@ def _can_create(access, department):
 
 
 def can_open_projects(access):
+    if not enabled(access.organization, "projects"):
+        return False
     if access.allows(Permission.PROJECTS_VIEW):
         return True
     if access.membership is not None and access.membership.project_memberships.filter(
@@ -112,6 +118,7 @@ def project_permissions(*, access, project):
 
 
 def project_options(*, access, project_id=None):
+    require_module(access.organization, "projects")
     can_create_independent = _can_create(access, None)
     departments = []
     leader_contexts = can_create_independent and access.allows(Permission.PROJECTS_MANAGE_LEAD)
@@ -181,7 +188,7 @@ def _validate_dates(start_date, planned_end_date):
 
 
 def _managed_project(user, org_id, project_id, action, *, allow_archived=False):
-    access = organization_access(user=user, org_id=org_id, lock=True)
+    access = organization_access(user=user, org_id=org_id, lock=True, module="projects")
     project = get_object_or_404(
         access.organization.projects.select_for_update(of=("self",)).select_related(
             "responsible_department",
@@ -211,7 +218,7 @@ def create_project(
     *, user, org_id, name, description="", status=Project.Status.DRAFT,
     start_date=None, planned_end_date=None, lead_membership_id=None, responsible_department_id=None,
 ):
-    access = organization_access(user=user, org_id=org_id, lock=True)
+    access = organization_access(user=user, org_id=org_id, lock=True, module="projects")
     department = _department(access, responsible_department_id)
     _require_active_department(department)
     if not _can_create(access, department):

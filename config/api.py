@@ -15,6 +15,8 @@ from apps.notifications.api import router as notifications_router
 from apps.notifications.policy_api import router as notification_policy_router
 from apps.departments.api import router as departments_router
 from apps.departments.membership_api import router as department_membership_router
+from apps.organizations.modules import ModuleDisabled
+from apps.organizations.modules_api import router as modules_router
 from apps.organizations.ownership_api import router as ownership_router
 from apps.organizations.api import router as organizations_router
 from apps.projects.api import router as projects_router
@@ -38,6 +40,13 @@ def permission_denied(request, exc):
     return api.create_response(request, {"detail": "Доступ запрещён."}, status=403)
 
 
+@api.exception_handler(ModuleDisabled)
+def module_disabled(request, exc):
+    return api.create_response(
+        request, {"code": "module_disabled", "module": exc.module_code, "detail": str(exc)}, status=409,
+    )
+
+
 api.add_router("", notifications_router)
 api.add_router("/organizations", audit_router)
 api.add_router("/organizations", notification_policy_router)
@@ -52,6 +61,7 @@ api.add_router("/organizations", department_membership_router)
 api.add_router("/organizations", departments_router)
 api.add_router("/organizations", onboarding_router)
 api.add_router("/organizations", ownership_router)
+api.add_router("/organizations", modules_router)
 api.add_router("/organizations", organizations_router)
 
 

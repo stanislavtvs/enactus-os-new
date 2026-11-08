@@ -14,6 +14,7 @@ from apps.projects.staffing import StaffingConflict, set_assignment_mode
 from apps.tasks.reviews import set_organization_review_policy
 
 from .models import Organization
+from .modules import enabled, require_module
 from .onboarding import OnboardingError, set_join_policy
 from .onboarding_forms import MAX_ID, PolicyForm
 from .services import visible_organizations
@@ -100,6 +101,7 @@ def organization_settings(request, org_id):
                 )
                 if not Access(request.user, organization).is_owner:
                     raise PermissionDenied
+                require_module(organization, "tasks")
                 old_mode = organization.task_assignment_mode
                 new_mode = task_assignment_form.cleaned_data["task_mode"]
                 if old_mode != new_mode:
@@ -133,6 +135,8 @@ def organization_settings(request, org_id):
     return render(request, "organizations/settings.html", {
         "organization": organization,
         "ownership_api_url": reverse("api-1.0.0:ownership_transfer", kwargs={"org_id": org_id}),
+        "staffing_enabled": enabled(organization, "staffing"),
+        "tasks_enabled": enabled(organization, "tasks"),
         "policy_form": form,
         "assignment_form": assignment_form,
         "task_assignment_form": task_assignment_form,

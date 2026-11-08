@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Модули — {{ organization.name }} — Enactus OS{% endblock %}
+{% block extra_head %}
+    <link rel="stylesheet" href="{% static 'ui/collection.css' %}">
+    <link rel="stylesheet" href="{% static 'organizations/modules.css' %}">
+    <script type="module" src="{% static 'organizations/modules.js' %}"></script>
+{% endblock %}
+
+{% block content %}
+    <nav class="breadcrumbs" aria-label="Путь к странице">
+        <a href="{% url 'organization-detail' org_id=organization.id %}">{{ organization.name }}</a>
+    </nav>
+    <section id="modules-app" data-api-url="{{ modules_api_url }}" aria-labelledby="modules-heading">
+        <header class="page-heading">
+            <p class="eyebrow">{{ organization.name }}</p>
+            <h1 id="modules-heading">Модули</h1>
+            <p class="muted">Управляйте доступом к разделам организации. Данные отключённых модулей сохраняются.</p>
+        </header>
+
+        <noscript><p>Включите JavaScript, чтобы загрузить каталог модулей.</p></noscript>
+        <p class="muted modules-message" id="modules-status" role="status"></p>
+        <p class="form-errors modules-message" id="modules-error" role="alert"></p>
+        <button class="button collection-secondary" id="modules-retry" type="button" hidden>Обновить каталог</button>
+
+        <section class="modules-group" id="modules-optional-section" aria-labelledby="modules-optional-heading" hidden>
+            <div>
+                <h2 id="modules-optional-heading">Подключаемые модули</h2>
+                <p class="muted">Настройки действуют в этой организации.</p>
+            </div>
+            <ul class="modules-list" id="modules-optional-list" role="list"></ul>
+        </section>
+        <section class="modules-group" id="modules-required-section" aria-labelledby="modules-required-heading" hidden>
+            <div>
+                <h2 id="modules-required-heading">Обязательные модули</h2>
+                <p class="muted">Эти функции обеспечивают работу организации и её безопасность. Они всегда включены.</p>
+            </div>
+            <ul class="modules-list" id="modules-required-list" role="list"></ul>
+        </section>
+
+        <dialog class="collection-dialog modules-dialog" id="modules-dialog" aria-labelledby="modules-dialog-title" aria-describedby="modules-dialog-summary modules-dialog-changes">
+            <header class="collection-dialog-header">
+                <h2 id="modules-dialog-title"></h2>
+                <button class="button collection-secondary" type="button" data-dialog-close aria-label="Закрыть подтверждение">
+                    <svg class="icon" aria-hidden="true"><use href="#icon-close"/></svg>
+                </button>
+            </header>
+            <form id="modules-change-form" class="form-stack" method="post">
+                {% csrf_token %}
+                <p id="modules-dialog-summary"></p>
+                <ul class="modules-change-list" id="modules-dialog-changes" role="list"></ul>
+                <p id="modules-dialog-error" class="form-errors modules-message" role="alert"></p>
+                <div class="collection-dialog-actions">
+                    <button class="button collection-secondary" id="modules-cancel" type="button" data-dialog-close>Отмена</button>
+                    <button class="button button-primary" id="modules-confirm" type="submit">Подтвердить</button>
+                </div>
+            </form>
+        </dialog>
+    </section>
+{% endblock %}

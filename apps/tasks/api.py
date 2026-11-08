@@ -7,6 +7,7 @@ from ninja.security import django_auth
 
 from apps.access.policy import Permission
 from apps.access.services import organization_access
+from apps.organizations.modules import PROJECTS, TASKS, require_module
 from apps.projects.services import visible_project
 
 from . import decomposition, dependencies, distribution, priorities, reviews, services, statuses
@@ -157,14 +158,16 @@ def _task_data(task, access, parents=None):
 @transaction.atomic
 def _changed_task(request, org_id, operation, **kwargs):
     task = _perform(operation, user=request.user, org_id=org_id, **kwargs)
-    access = organization_access(user=request.user, org_id=org_id)
+    access = organization_access(user=request.user, org_id=org_id, module=TASKS)
     task = services.visible_task(access=access, task_id=task.pk)
     return _task_data(task, access)
 
 
 @router.get("/{org_id}/tasks/", response=TaskListOutput, url_name="task_list")
 def list_tasks(request, org_id: RecordId, filters: Query[TaskListQuery]):
-    access = organization_access(user=request.user, org_id=org_id)
+    access = organization_access(user=request.user, org_id=org_id, module=TASKS)
+    if filters.project_id is not None:
+        require_module(access.organization, PROJECTS)
     query = filters.model_dump(exclude={"queue"})
     queue_ids = None
     if filters.queue == "distribution":
@@ -191,7 +194,7 @@ def create_task(request, org_id: RecordId, payload: TaskInput):
 
 @router.get("/{org_id}/tasks/{task_id}/", response=TaskOutput, url_name="task_detail")
 def get_task(request, org_id: RecordId, task_id: RecordId):
-    access = organization_access(user=request.user, org_id=org_id)
+    access = organization_access(user=request.user, org_id=org_id, module=TASKS)
     return _task_data(reviews.visible_workflow_task(access=access, task_id=task_id), access)
 
 
@@ -236,13 +239,13 @@ def set_status(request, org_id: RecordId, task_id: RecordId, payload: StatusInpu
 
 @router.get("/{org_id}/task-options/", response=TaskOptions, url_name="task_options")
 def get_task_options(request, org_id: RecordId, task_id: RecordId | None = None):
-    access = organization_access(user=request.user, org_id=org_id)
+    access = organization_access(user=request.user, org_id=org_id, module=TASKS)
     return services.task_options(access=access, task_id=task_id)
 
 
 @router.get("/{org_id}/task-assignee-options/", response=TaskAssigneeOptions, url_name="task_assignee_options")
 def get_task_assignee_options(request, response: HttpResponse, org_id: RecordId, scope: Query[TaskAssigneeOptionsQuery]):
-    access = organization_access(user=request.user, org_id=org_id)
+    access = organization_access(user=request.user, org_id=org_id, module=TASKS)
     context = {key: value or None for key, value in scope.model_dump(exclude_unset=True).items()}
     response["Cache-Control"] = "no-store"
     return _perform(services.task_assignee_options, access=access, **context)
@@ -280,7 +283,7 @@ def _workflow_command(request, org_id, operation, **kwargs):
 
 @router.get("/{org_id}/tasks/{task_id}/workflow/", response=WorkflowOutput)
 def task_workflow(request, org_id: RecordId, task_id: RecordId):
-    access = organization_access(user=request.user, org_id=org_id)
+    access = organization_access(user=request.user, org_id=org_id, module=TASKS)
     task, submissions, current_stage = _perform(
         reviews.get_review, user=request.user, org_id=org_id, task_id=task_id,
     )
@@ -374,7 +377,7 @@ def task_review_policy(request, org_id: RecordId, task_id: RecordId, payload: Ta
 
 @router.get("/{org_id}/task-review-policy/", response=ReviewPolicyOutput)
 def organization_review_policy(request, org_id: RecordId):
-    access = organization_access(user=request.user, org_id=org_id)
+    access = organization_access(user=request.user, org_id=org_id, module=TASKS)
     return {
         "policy": access.organization.task_review_policy,
         "can_manage": reviews.can_manage_organization_review(access),
@@ -390,7 +393,8 @@ def set_organization_review_policy(request, org_id: RecordId, payload: ReviewPol
 
 @router.get("/{org_id}/projects/{project_id}/task-review-policy/", response=ReviewPolicyOutput)
 def project_review_policy(request, org_id: RecordId, project_id: RecordId):
-    access = organization_access(user=request.user, org_id=org_id)
+    access = organization_access(user=request.user, org_id=org_id, module=TASKS)
+    require_module(access.organization, PROJECTS)
     project = visible_project(access=access, project_id=project_id)
     return {
         "policy": project.task_review_policy,
@@ -424,7 +428,7 @@ def _subtask_data(task, access, parent):
 
 @router.get("/{org_id}/tasks/{task_id}/subtasks/", response=SubtaskListOutput)
 def list_subtasks(request, org_id: RecordId, task_id: RecordId, filters: Query[HierarchyQuery]):
-    access = organization_access(user=request.user, org_id=org_id)
+    access = organization_access(user=request.user, org_id=org_id, module=TASKS)
     tasks, total, completed = decomposition.list_subtasks(
         access=access, task_id=task_id, **filters.model_dump(),
     )
@@ -476,7 +480,7 @@ def _checklist_data(checklist):
 
 @router.get("/{org_id}/tasks/{task_id}/decomposition/", response=DecompositionOutput)
 def task_decomposition(request, org_id: RecordId, task_id: RecordId):
-    access = organization_access(user=request.user, org_id=org_id)
+    access = organization_access(user=request.user, org_id=org_id, module=TASKS)
     data = decomposition.get_decomposition(access=access, task_id=task_id)
     events = list(data["conversions"])
     visible_ids = set(services._visible_rows(access).filter(
@@ -609,7 +613,7 @@ def _dependency_data(dependency, *, predecessor_visible):
 
 @router.get("/{org_id}/tasks/{task_id}/dependencies/", response=DependencyListOutput)
 def list_task_dependencies(request, org_id: RecordId, task_id: RecordId):
-    access = organization_access(user=request.user, org_id=org_id)
+    access = organization_access(user=request.user, org_id=org_id, module=TASKS)
     task, can_manage, rows = dependencies.list_dependencies(access=access, task_id=task_id)
     rows = list(rows)
     visible_ids = set(services._visible_rows(access).filter(
@@ -733,7 +737,7 @@ def update_task_transition(
 
 @router.get("/{org_id}/tasks/{task_id}/workflow-status/", response=TaskWorkflowStatusOutput)
 def get_task_workflow_status(request, org_id: RecordId, task_id: RecordId):
-    access = organization_access(user=request.user, org_id=org_id)
+    access = organization_access(user=request.user, org_id=org_id, module=TASKS)
     task = services.visible_task(access=access, task_id=task_id)
     return {
         "current": statuses.task_workflow_status(access, task),
