@@ -129,6 +129,7 @@ export function setupParticipants({app, api, token, zone, isDetailOpen}) {
     async function load(event, message = "") {
         const version = ++generation;
         current = event;
+        get("heading").textContent = event.recurrence ? "Участники серии" : "Участники";
         section.hidden = !(event.can_invite || event.can_manage_invitations);
         if (section.hidden) {
             return;

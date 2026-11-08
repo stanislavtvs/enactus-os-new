@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import date, datetime
 from typing import Annotated
 
 from ninja import Schema
@@ -6,6 +6,7 @@ from pydantic import AwareDatetime, ConfigDict, Field, StringConstraints
 
 from .invitation_models import CalendarInvitation
 from .models import CalendarEvent
+from .recurrence_schemas import RecurrenceOutput
 from .schemas import InputId
 
 
@@ -121,6 +122,7 @@ class InvitationEvent(Schema):
     online_url: str | None
     status: CalendarEvent.Status
     status_label: str
+    recurrence: RecurrenceOutput | None = None
 
 
 class OwnInvitation(Schema):
@@ -136,7 +138,18 @@ class OwnInvitation(Schema):
     responded_at: str | None
     needs_reconfirmation: bool
     can_respond: bool
+    is_recurring: bool = False
     event: InvitationEvent
+
+
+class OwnOccurrenceInvitation(OwnInvitation):
+    occurrence_key: date
+    occurrence_rsvp_revision: int
+    series_response: CalendarInvitation.Response | None
+
+
+class OccurrenceRSVPInput(RSVPAnswerInput):
+    expected_occurrence_revision: Annotated[int, Field(ge=0, le=2**31 - 1, strict=True)]
 
 
 class OwnInvitations(Schema):
@@ -153,3 +166,11 @@ class RSVPHistoryEntry(Schema):
 
 class RSVPHistoryOutput(Schema):
     items: list[RSVPHistoryEntry]
+
+
+class OccurrenceRSVPHistoryEntry(RSVPHistoryEntry):
+    occurrence_rsvp_revision: int
+
+
+class OccurrenceRSVPHistoryOutput(Schema):
+    items: list[OccurrenceRSVPHistoryEntry]

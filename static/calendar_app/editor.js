@@ -1,5 +1,6 @@
 import {errorMessage, request} from "../departments/directory.js";
 import {setupDialog} from "../ui/collection.js";
+import {occurrencePath, setupRuleFields} from "./recurrence.js";
 import {addDays, civilBoundary, localCandidates, localDateTime, localDay, offsetLabel, validZone} from "./dates.js";
 
 export function httpLink(value) {
@@ -32,6 +33,7 @@ export function setupEditor({app, api, token, scopes, zone, day, onSaved}) {
     const form = get("event-form");
     const fields = form.elements;
     const error = get("form-error");
+    const recurrence = setupRuleFields(get("create-recurrence"));
     const folds = ["start", "end"].map((part) => ({
         input: get(`event-${part}`),
         wrap: get(`${part}-fold-field`),
@@ -75,7 +77,17 @@ export function setupEditor({app, api, token, scopes, zone, day, onSaved}) {
         editing = event;
         form.reset();
         error.textContent = "";
+        const occurrence = Boolean(event?.occurrence_key);
+        const scope = occurrence ? "Только эта встреча" : event?.recurrence ? "Вся серия" : "";
         get("editor-heading").textContent = event ? "Редактировать событие" : "Новое событие";
+        get("editor-scope").textContent = scope;
+        get("create-recurrence").hidden = Boolean(event);
+        recurrence.set(null);
+        fields.timezone.readOnly = occurrence;
+        fields.all_day.disabled = occurrence;
+        fields.type.disabled = occurrence;
+        get("event-project-field").hidden = occurrence;
+        get("event-department-field").hidden = occurrence;
         const eventZone = event?.timezone ?? zone();
         const activeDay = day();
         fields.timezone.value = eventZone;
@@ -157,7 +169,19 @@ export function setupEditor({app, api, token, scopes, zone, day, onSaved}) {
                 starts_at: start, ends_at: end, timezone: eventZone,
                 all_day: fields.all_day.checked, location: fields.location.value.trim(), online_url: link,
             };
-            if (!editing || editing.can_manage_scope) {
+            if (!editing) {
+                const rule = recurrence.value(localDay(start, eventZone));
+                if (rule) {
+                    payload.recurrence = rule;
+                }
+            }
+            if (editing?.occurrence_key) {
+                delete payload.type;
+                delete payload.timezone;
+                delete payload.all_day;
+                payload.expected_version = editing.occurrence_version;
+            }
+            if (!editing || (editing.can_manage_scope && !editing.occurrence_key)) {
                 if (!editing || project !== editing.project_id) {
                     payload.project_id = project;
                 }
@@ -172,7 +196,7 @@ export function setupEditor({app, api, token, scopes, zone, day, onSaved}) {
         saving = true;
         modal.setBusy(true);
         try {
-            const url = editing ? `${api}events/${editing.id}/` : `${api}events/`;
+            const url = editing ? occurrencePath(api, editing) : `${api}events/`;
             await request(url, editing ? "PATCH" : "POST", token, payload);
             modal.close();
             onSaved(editing ? "Изменения сохранены." : "Событие создано.");

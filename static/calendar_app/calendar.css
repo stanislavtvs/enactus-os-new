@@ -188,3 +188,32 @@ button.calendar-entry:hover, a.calendar-entry:hover { border-color: var(--entry-
     .calendar-toolbar > .collection-filters { margin-inline-start: 0; }
     .calendar-agenda-row { grid-template-columns: minmax(0, 1fr); gap: .15rem; }
 }
+
+.calendar-recurrence-fields, .calendar-weekday-field {
+    display: grid;
+    gap: var(--space-sm);
+    min-inline-size: 0;
+    margin: 0;
+    padding: var(--space-sm);
+    border: 1px solid var(--line);
+    border-radius: .55rem;
+}
+.calendar-recurrence-fields legend, .calendar-weekday-field legend {
+    padding-inline: .3rem;
+    font-weight: 650;
+}
+.calendar-weekday-field {
+    display: flex;
+    flex-wrap: wrap;
+}
+.calendar-weekday-field label { display: inline-flex; align-items: center; gap: .2rem; }
+.calendar-recurrence-label { color: var(--focus); font-weight: 650; }
+.calendar-series-actions {
+    display: grid;
+    gap: var(--space-xs);
+    margin-block-start: var(--space-md);
+    padding-block-start: var(--space-sm);
+    border-block-start: 1px solid var(--line);
+}
+.calendar-series-actions h3 { margin: 0; }
+.calendar-entry[data-occurrence-key] .calendar-entry-title::before { content: "↻ "; }

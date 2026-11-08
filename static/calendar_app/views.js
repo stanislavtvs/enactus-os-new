@@ -1,5 +1,6 @@
 import {element} from "../departments/directory.js";
 import {civilLabel, groupByDay} from "./dates.js";
+import {scheduleChanged} from "./recurrence.js";
 
 const sourceNames = {task_deadline: "Дедлайн задачи", meeting: "Встреча", event: "Мероприятие"};
 const weekdayNames = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"];
@@ -27,10 +28,17 @@ function entryLink(segment, openEvent, compact = false) {
     const entry = element(task ? (href ? "a" : "span") : "button", "calendar-entry");
     entry.dataset.source = item.source;
     entry.dataset.status = item.status;
+    if (item.occurrence_key) {
+        entry.dataset.occurrenceKey = item.occurrence_key;
+        entry.dataset.seriesId = item.series_id;
+    }
     const category = sourceLabel(item.source);
     const status = item.status_label || "";
-    entry.setAttribute("aria-label", [category, item.title, time, status].filter(Boolean).join(", "));
-    entry.title = [item.title, time, status].filter(Boolean).join(" · ");
+    const recurrence = item.occurrence_key
+        ? scheduleChanged(item) ? "Расписание изменено" : "Повторяющаяся встреча"
+        : "";
+    entry.setAttribute("aria-label", [category, item.title, time, status, recurrence].filter(Boolean).join(", "));
+    entry.title = [item.title, time, status, recurrence].filter(Boolean).join(" · ");
     if (href) {
         entry.href = href;
     }
@@ -40,7 +48,7 @@ function entryLink(segment, openEvent, compact = false) {
         entry.addEventListener("click", () => openEvent(item, entry));
     }
     entry.append(element("span", "calendar-entry-title", item.title));
-    const meta = [compact ? "" : category, time, status].filter(Boolean).join(" · ");
+    const meta = [compact ? "" : category, time, scheduleChanged(item) ? recurrence : "", status].filter(Boolean).join(" · ");
     if (meta) {
         entry.append(element("span", "calendar-entry-meta", meta));
     }

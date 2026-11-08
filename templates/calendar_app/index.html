@@ -66,6 +66,7 @@
                         <label for="calendar-department-filter">Подразделение</label>
                         <select id="calendar-department-filter"><option value="">Все подразделения</option></select>
                     </div>
+                    <label class="calendar-check"><input type="checkbox" id="calendar-cancelled-filter"> Показывать отменённые повторения</label>
                     <label class="calendar-check"><input type="checkbox" id="calendar-archive-filter"> Показывать архивные</label>
                     <div class="form-field">
                         <label for="calendar-timezone">Часовой пояс календаря</label>
@@ -95,6 +96,7 @@
                 </button>
             </header>
             <form id="calendar-event-form" class="form-stack" method="post">
+                <p id="calendar-editor-scope" class="muted calendar-message"></p>
                 <div class="calendar-fields">
                     <div class="form-field">
                         <label for="calendar-event-title">Название</label>
@@ -167,6 +169,9 @@
                         <select id="calendar-event-department" name="department_id"></select>
                     </div>
                 </div>
+                <div id="calendar-create-recurrence">
+                    {% include "calendar_app/recurrence_fields.html" with prefix="calendar-create-rule" allow_once=True %}
+                </div>
                 <p id="calendar-form-error" class="form-errors" role="alert"></p>
                 <div class="collection-dialog-actions">
                     <button class="button collection-secondary" type="button" data-dialog-close>Закрыть</button>
@@ -185,15 +190,28 @@
             <p id="calendar-detail-status" class="muted calendar-message" role="status"></p>
             <p id="calendar-detail-error" class="form-errors calendar-message" role="alert"></p>
             <dl id="calendar-detail-facts" class="calendar-fields calendar-facts"></dl>
+            <p id="calendar-detail-recurrence" class="calendar-recurrence-label calendar-message"></p>
             <p id="calendar-detail-description" class="calendar-description"></p>
             <div id="calendar-detail-invitation"></div>
-            {% include "calendar_app/participants.html" %}
-            <div id="calendar-detail-actions" class="collection-dialog-actions" hidden>
+            <div id="calendar-detail-actions" class="collection-dialog-actions" role="group" aria-label="Действия события" hidden>
+                <button class="button collection-secondary" id="calendar-event-rule" type="button" hidden>Настроить повторение</button>
                 <button class="button collection-secondary" id="calendar-event-edit" type="button" hidden>Редактировать</button>
                 <button class="button collection-secondary" id="calendar-event-cancel" type="button" hidden>Отменить событие</button>
                 <button class="button collection-secondary" id="calendar-event-archive" type="button" hidden>Архивировать</button>
             </div>
+            {% include "calendar_app/participants.html" %}
+            <section id="calendar-series-actions" class="calendar-series-actions" aria-labelledby="calendar-series-actions-heading" hidden>
+                <h3 id="calendar-series-actions-heading">Вся серия</h3>
+                <div class="calendar-participants-controls">
+                    <button class="button collection-secondary" id="calendar-series-edit" type="button" hidden>Редактировать серию</button>
+                    <button class="button collection-secondary" id="calendar-series-rule" type="button" hidden>Изменить правило</button>
+                    <button class="button collection-secondary" id="calendar-series-stop" type="button" hidden>Остановить будущие</button>
+                    <button class="button collection-secondary" id="calendar-series-cancel" type="button" hidden>Отменить всю серию</button>
+                    <button class="button collection-secondary" id="calendar-series-archive" type="button" hidden>Архивировать серию</button>
+                </div>
+            </section>
         </dialog>
         {% include "calendar_app/audience_dialog.html" %}
+        {% include "calendar_app/series_dialogs.html" %}
     </div>
 {% endblock %}

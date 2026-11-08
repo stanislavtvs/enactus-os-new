@@ -5,6 +5,7 @@ from ninja import Schema
 from pydantic import AwareDatetime, ConfigDict, Field, HttpUrl, StringConstraints, field_validator
 
 from .models import EVENT_LOCATION_MAX_LENGTH, EVENT_TITLE_MAX_LENGTH, CalendarEvent
+from .recurrence_schemas import RecurrenceInput, RecurrenceOutput
 
 RecordId = Annotated[int, Field(gt=0, le=2**63 - 1)]
 InputId = Annotated[int, Field(gt=0, le=2**63 - 1, strict=True)]
@@ -20,6 +21,7 @@ class EventQuery(Schema):
     project_id: RecordId | None = None
     department_id: RecordId | None = None
     include_archived: bool = False
+    include_cancelled: bool = False
 
 
 class CalendarQuery(EventQuery):
@@ -45,6 +47,7 @@ class EventInput(Schema):
     online_url: HttpUrl | Literal[""] | None = None
     project_id: InputId | None = None
     department_id: InputId | None = None
+    recurrence: RecurrenceInput | None = None
 
     @field_validator("title", "description", "type", "starts_at", "ends_at", "timezone", "all_day", "rsvp_mode")
     @classmethod
@@ -80,6 +83,15 @@ class CalendarItem(Schema):
     can_edit: bool
     can_cancel: bool
     can_archive: bool
+    series_id: int | None = None
+    occurrence_key: date | None = None
+    original_starts_at: datetime | None = None
+    original_ends_at: datetime | None = None
+    is_recurring: bool = False
+    is_exception: bool = False
+    occurrence_version: int | None = None
+    occurrence_rsvp_revision: int | None = None
+    recurrence: RecurrenceOutput | None = None
 
 
 class EventOutput(CalendarItem):

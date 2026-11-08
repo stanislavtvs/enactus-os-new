@@ -1,5 +1,6 @@
 from datetime import datetime, time, timedelta, timezone as datetime_timezone
 from functools import cache, lru_cache
+from itertools import islice
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError, available_timezones
 
 from django.core.exceptions import PermissionDenied
@@ -28,6 +29,7 @@ ARCHIVE = "calendar.archive"
 MANAGE_SCOPE = "calendar.manage_scope"
 MANAGE_INVITATIONS = "calendar.invite.manage"
 MAX_RANGE_DAYS = 42
+MAX_CALENDAR_ITEMS = 2000
 # Civil all-day dates can differ from viewer dates by more than 24 hours.
 ALL_DAY_RANGE_MARGIN = timedelta(days=2)
 
@@ -151,7 +153,7 @@ def _event_rows(access, *, lock=False):
     from .invitation_services import annotate_invited
 
     rows = access.organization.calendar_events.select_related(
-        "department", "project__responsible_department",
+        "department", "project__responsible_department", "recurrence_rule",
     ).annotate(_active_project_member=Exists(ProjectMembership.objects.filter(
         organization=access.organization, project_id=OuterRef("project_id"),
         organization_membership=access.membership, is_active=True,
@@ -178,14 +180,8 @@ def _all_day_overlaps(event, start, end):
     return event.starts_at.astimezone(zone).date() < end and event.ends_at.astimezone(zone).date() > start
 
 
-def _events_for_range(
-    *, access, start, end, bounds, source=None, project_id=None, department_id=None, include_archived=False,
-):
-    lower, upper, extended_lower, extended_upper = bounds
-    rows = _event_rows(access).filter(
-        Q(all_day=False, starts_at__lt=upper, ends_at__gt=lower)
-        | Q(all_day=True, starts_at__lt=extended_upper, ends_at__gt=extended_lower),
-    )
+def _event_scope_rows(access, *, source, project_id, department_id, include_archived):
+    rows = _event_rows(access)
     if source is not None:
         rows = rows.filter(event_type=source)
     if project_id is not None:
@@ -194,13 +190,40 @@ def _events_for_range(
         rows = rows.filter(department_id=department_id)
     if not include_archived:
         rows = rows.exclude(status=CalendarEvent.Status.ARCHIVED)
+    return rows
+
+
+def _range_event_items(
+    *, access, start, end, bounds, timezone_name, source, project_id, department_id,
+    include_archived, include_cancelled,
+):
+    from .recurrence import expand_event_occurrences, occurrence_item, prepare_occurrence_range
+
+    lower, upper, extended_lower, extended_upper = bounds
+    rows = _event_scope_rows(
+        access, source=source, project_id=project_id, department_id=department_id,
+        include_archived=include_archived,
+    )
     can_include_invited = project_id is None and department_id is None
-    return [
-        event for event in rows.order_by("starts_at", "id")
+    ordinary = rows.filter(recurrence_rule__isnull=True).filter(
+        Q(all_day=False, starts_at__lt=upper, ends_at__gt=lower)
+        | Q(all_day=True, starts_at__lt=extended_upper, ends_at__gt=extended_lower),
+    )
+    for event in ordinary.iterator(chunk_size=200):
         if (
             _can_read_event(access, event) or (can_include_invited and event._invitation_id is not None)
-        ) and (not event.all_day or _all_day_overlaps(event, start, end))
-    ]
+        ) and (not event.all_day or _all_day_overlaps(event, start, end)):
+            yield event_item(access, event)
+
+    series = prepare_occurrence_range(rows, start=start, end=end, bounds=bounds)
+    for event in series.iterator(chunk_size=200):
+        if not (_can_read_event(access, event) or (can_include_invited and event._invitation_id is not None)):
+            continue
+        for occurrence in expand_event_occurrences(
+            event, start=start, end=end, timezone_name=timezone_name, include_cancelled=include_cancelled,
+            exceptions=event._range_exceptions, bounds=bounds,
+        ):
+            yield occurrence_item(access, event, occurrence)
 
 
 def event_permissions(access, event):
@@ -219,8 +242,10 @@ def event_permissions(access, event):
 
 def event_item(access, event):
     from .invitation_services import can_invite, can_manage_invitations
+    from .recurrence import rule_data
 
     full_access = _can_read_event(access, event)
+    rule = getattr(event, "recurrence_rule", None)
     return {
         "id": event.pk,
         "source": event.event_type,
@@ -245,6 +270,9 @@ def event_item(access, event):
         "invitation_id": getattr(event, "_invitation_id", None),
         "can_invite": full_access and can_invite(access, event),
         "can_manage_invitations": full_access and can_manage_invitations(access, event),
+        "is_recurring": rule is not None,
+        "series_id": event.pk if rule is not None else None,
+        "recurrence": rule_data(rule) if rule is not None else None,
         **event_permissions(access, event),
     }
 
@@ -273,36 +301,56 @@ def _task_item(access, task, timezone_name):
     }
 
 
-def list_events(*, access, start, end, timezone_name, source=None, project_id=None, department_id=None, include_archived=False):
-    bounds = _date_bounds(start, end, timezone_name)
-    return [
-        event_item(access, event)
-        for event in _events_for_range(
-            access=access, start=start, end=end, bounds=bounds, source=source,
-            project_id=project_id, department_id=department_id, include_archived=include_archived,
-        )
-    ]
+def _bounded_items(rows):
+    items = list(islice(rows, MAX_CALENDAR_ITEMS + 1))
+    if len(items) > MAX_CALENDAR_ITEMS:
+        raise CalendarValidation("В периоде слишком много записей. Уменьшите диапазон или примените фильтры.")
+    return items
 
 
-def calendar_feed(*, access, start, end, timezone_name, source=None, project_id=None, department_id=None, include_archived=False):
+def _calendar_order(item):
+    return item["starts_at"], item["source"], item["id"], str(item.get("occurrence_key") or "")
+
+
+def list_events(
+    *, access, start, end, timezone_name, source=None, project_id=None, department_id=None,
+    include_archived=False, include_cancelled=False,
+):
+    rows = _range_event_items(
+        access=access, start=start, end=end, bounds=_date_bounds(start, end, timezone_name),
+        timezone_name=timezone_name, source=source, project_id=project_id, department_id=department_id,
+        include_archived=include_archived, include_cancelled=include_cancelled,
+    )
+    return sorted(_bounded_items(rows), key=_calendar_order)
+
+
+def _feed_rows(*, access, start, end, timezone_name, source, project_id, department_id, include_archived, include_cancelled):
     bounds = _date_bounds(start, end, timezone_name)
-    items = []
     if source != "task_deadline":
-        items.extend(
-            event_item(access, event)
-            for event in _events_for_range(
-                access=access, start=start, end=end, bounds=bounds, source=source,
-                project_id=project_id, department_id=department_id, include_archived=include_archived,
-            )
+        yield from _range_event_items(
+            access=access, start=start, end=end, bounds=bounds, timezone_name=timezone_name, source=source,
+            project_id=project_id, department_id=department_id, include_archived=include_archived,
+            include_cancelled=include_cancelled,
         )
     if source not in CalendarEvent.Type.values:
-        items.extend(
-            _task_item(access, task, timezone_name) for task in visible_task_deadlines(
-                access=access, start=bounds[0], end=bounds[1], project_id=project_id,
-                department_id=department_id, include_archived=include_archived,
-            )
+        tasks = visible_task_deadlines(
+            access=access, start=bounds[0], end=bounds[1], project_id=project_id,
+            department_id=department_id, include_archived=include_archived,
         )
-    return sorted(items, key=lambda item: (item["starts_at"], item["source"], item["id"]))
+        for task in tasks.iterator(chunk_size=200):
+            yield _task_item(access, task, timezone_name)
+
+
+def calendar_feed(
+    *, access, start, end, timezone_name, source=None, project_id=None, department_id=None,
+    include_archived=False, include_cancelled=False,
+):
+    rows = _feed_rows(
+        access=access, start=start, end=end, timezone_name=timezone_name, source=source,
+        project_id=project_id, department_id=department_id, include_archived=include_archived,
+        include_cancelled=include_cancelled,
+    )
+    return sorted(_bounded_items(rows), key=_calendar_order)
 
 
 def _linked_project(access, project_id):
@@ -354,8 +402,10 @@ def _validate_interval(starts_at, ends_at, timezone_name, all_day):
 def create_event(
     *, user, org_id, title, description, event_type, starts_at, ends_at, timezone_name,
     all_day=False, location="", online_url="", project_id=None, department_id=None,
-    rsvp_mode=CalendarEvent.RSVPMode.INFORMATIONAL,
+    rsvp_mode=CalendarEvent.RSVPMode.INFORMATIONAL, recurrence=None,
 ):
+    from .recurrence import install_rule
+
     access = organization_access(user=user, org_id=org_id, lock=True)
     project = _linked_project(access, project_id)
     department = _linked_department(access, department_id)
@@ -369,11 +419,15 @@ def create_event(
         starts_at=starts_at, ends_at=ends_at, timezone=timezone_name, all_day=all_day,
         location=location, online_url=online_url, project=project, department=department, rsvp_mode=rsvp_mode,
     )
+    if recurrence is not None:
+        install_rule(event, recurrence)
     return event_item(access, event)
 
 
 @transaction.atomic
 def update_event(*, user, org_id, event_id, changes):
+    from .recurrence import sync_recurrence_timezone, validate_series_schedule_change
+
     access = organization_access(user=user, org_id=org_id, lock=True)
     event = visible_event(access=access, event_id=event_id, lock=True)
     if (not changes or changes.keys() - {"rsvp_mode"}) and not _allows(access, UPDATE, event.project, event.department):
@@ -382,6 +436,9 @@ def update_event(*, user, org_id, event_id, changes):
         raise PermissionDenied
     if event.status != CalendarEvent.Status.SCHEDULED:
         raise CalendarConflict("Изменить можно только запланированное событие.")
+    if "recurrence" in changes:
+        raise CalendarValidation("Измените правило повтора отдельным действием для всей серии.")
+    validate_series_schedule_change(event, changes)
 
     new_project_id = changes.get("project_id", event.project_id)
     new_department_id = changes.get("department_id", event.department_id)
@@ -420,6 +477,8 @@ def update_event(*, user, org_id, event_id, changes):
         fields.append("rsvp_revision")
     if fields:
         event.save(update_fields=[*fields, "updated_at"])
+        if schedule_changed:
+            sync_recurrence_timezone(event)
     return event_item(access, event)
 
 

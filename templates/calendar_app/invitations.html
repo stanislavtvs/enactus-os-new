@@ -18,6 +18,7 @@
     </nav>
     <div id="calendar-invitations-app" data-organization-id="{{ organization.id }}"
          data-invitation-api-url="{{ invitation_api_url }}"
+         data-org-url="{{ api_org_url }}"
          data-list-url="{% url 'organization-calendar-invitations' org_id=organization.id %}"
          {% if invitation_id %}data-invitation-id="{{ invitation_id }}"{% endif %}>
         {% csrf_token %}
@@ -46,5 +47,24 @@
         <p id="calendar-invitation-error" class="form-errors calendar-message" role="alert"></p>
         <button class="button collection-secondary" id="calendar-invitation-retry" type="button" hidden>Обновить приглашения</button>
         <div id="calendar-invitation-list" class="calendar-invitation-list"></div>
+        {% if invitation_id %}
+            <section id="calendar-invitation-occurrences" class="calendar-invitation-card calendar-invitation-occurrences"
+                     aria-labelledby="calendar-occurrence-heading" hidden>
+                <h2 id="calendar-occurrence-heading">Отдельная встреча</h2>
+                <div class="calendar-participants-controls" aria-label="Период встреч" role="group">
+                    <button class="button collection-secondary" id="calendar-occurrence-previous" type="button">Предыдущий период</button>
+                    <span id="calendar-occurrence-period" class="muted"></span>
+                    <button class="button collection-secondary" id="calendar-occurrence-next" type="button">Следующий период</button>
+                </div>
+                <div class="form-field calendar-invitation-filter">
+                    <label for="calendar-occurrence-select">Выберите встречу</label>
+                    <select id="calendar-occurrence-select"></select>
+                </div>
+                <p id="calendar-occurrence-status" class="muted calendar-message" role="status"></p>
+                <p id="calendar-occurrence-error" class="form-errors calendar-message" role="alert"></p>
+                <button class="button collection-secondary" id="calendar-occurrence-reload" type="button" hidden>Обновить встречу</button>
+                <div id="calendar-occurrence-card"></div>
+            </section>
+        {% endif %}
     </div>
 {% endblock %}

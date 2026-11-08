@@ -1,0 +1,50 @@
+<fieldset class="calendar-recurrence-fields">
+    <legend>Повторение</legend>
+    <div class="calendar-fields">
+        <div class="form-field">
+            <label for="{{ prefix }}-frequency">Частота</label>
+            <select id="{{ prefix }}-frequency" name="recurrence_frequency">
+                {% if allow_once %}<option value="">Не повторяется</option>{% endif %}
+                <option value="daily">Каждый день</option>
+                <option value="weekly">Каждую неделю</option>
+                <option value="monthly">Каждый месяц</option>
+                <option value="yearly">Каждый год</option>
+            </select>
+        </div>
+        <div class="form-field" data-recurrence-part="interval" {% if allow_once %}hidden{% endif %}>
+            <label for="{{ prefix }}-interval">Интервал</label>
+            <input type="number" id="{{ prefix }}-interval" name="recurrence_interval" min="1" max="365" step="1" value="1">
+            <p class="muted form-hint" data-recurrence-units></p>
+        </div>
+    </div>
+    <fieldset class="calendar-weekday-field" data-recurrence-part="weekdays" hidden>
+        <legend>Дни недели</legend>
+        <label><input type="checkbox" name="recurrence_weekdays" value="1"> Пн</label>
+        <label><input type="checkbox" name="recurrence_weekdays" value="2"> Вт</label>
+        <label><input type="checkbox" name="recurrence_weekdays" value="3"> Ср</label>
+        <label><input type="checkbox" name="recurrence_weekdays" value="4"> Чт</label>
+        <label><input type="checkbox" name="recurrence_weekdays" value="5"> Пт</label>
+        <label><input type="checkbox" name="recurrence_weekdays" value="6"> Сб</label>
+        <label><input type="checkbox" name="recurrence_weekdays" value="7"> Вс</label>
+        <p class="muted form-hint">Включите день первой встречи. Если ничего не выбрать, будет использован этот день.</p>
+    </fieldset>
+    <div class="calendar-fields" data-recurrence-part="end" {% if allow_once %}hidden{% endif %}>
+        <div class="form-field">
+            <label for="{{ prefix }}-end">Окончание повторений</label>
+            <select id="{{ prefix }}-end" name="recurrence_end">
+                <option value="">Без окончания</option>
+                <option value="until">До даты включительно</option>
+                <option value="count">После числа повторений</option>
+            </select>
+        </div>
+        <div class="form-field" data-recurrence-part="until" hidden>
+            <label for="{{ prefix }}-until">Последняя возможная дата</label>
+            <input type="date" id="{{ prefix }}-until" name="recurrence_until">
+        </div>
+        <div class="form-field" data-recurrence-part="count" hidden>
+            <label for="{{ prefix }}-count">Число повторений</label>
+            <input type="number" id="{{ prefix }}-count" name="recurrence_count" min="1" max="10000" step="1">
+        </div>
+    </div>
+    <p class="muted form-hint" data-recurrence-part="skip" hidden>Даты, которых нет в месяце или году, пропускаются.</p>
+</fieldset>

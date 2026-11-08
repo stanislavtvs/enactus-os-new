@@ -77,3 +77,5 @@ from .invitation_models import (  # noqa: E402, F401
     CalendarInvitationSource,
     CalendarRSVPHistory,
 )
+from .recurrence_models import CalendarOccurrenceException, CalendarRecurrenceRule  # noqa: E402, F401
+from .recurrence_rsvp_models import CalendarOccurrenceRSVP, CalendarOccurrenceRSVPHistory  # noqa: E402, F401

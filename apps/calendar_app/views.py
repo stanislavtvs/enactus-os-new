@@ -30,8 +30,10 @@ def organization_calendar_invitations(request, org_id, invitation_id=None):
     access = organization_access(user=request.user, org_id=org_id)
     if invitation_id is not None:
         own_invitation(access=access, invitation_id=invitation_id)
+    feed_url = reverse("api-1.0.0:calendar_feed", kwargs={"org_id": org_id})
     return render(request, "calendar_app/invitations.html", {
         "organization": access.organization,
         "invitation_api_url": reverse("api-1.0.0:calendar_invitation_inbox"),
+        "api_org_url": feed_url.removesuffix("calendar/"),
         "invitation_id": invitation_id,
     })

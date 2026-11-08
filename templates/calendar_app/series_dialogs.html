@@ -1,0 +1,37 @@
+<dialog class="collection-dialog calendar-dialog" id="calendar-recurrence-dialog" aria-labelledby="calendar-recurrence-heading">
+    <header class="collection-dialog-header">
+        <h2 id="calendar-recurrence-heading">Повторение всей серии</h2>
+        <button class="button collection-secondary" type="button" data-dialog-close aria-label="Закрыть форму">
+            <svg class="icon" aria-hidden="true"><use href="#icon-close"/></svg>
+        </button>
+    </header>
+    <form id="calendar-recurrence-form" class="form-stack" method="post">
+        {% include "calendar_app/recurrence_fields.html" with prefix="calendar-series" allow_once=True %}
+        <p class="muted">Изменение применяется к серии. Сохранённые исключения и ответы учитываются при проверке.</p>
+        <p id="calendar-recurrence-error" class="form-errors" role="alert"></p>
+        <div class="collection-dialog-actions">
+            <button class="button collection-secondary" type="button" data-dialog-close>Закрыть</button>
+            <button class="button button-primary" id="calendar-recurrence-save" type="submit">Сохранить правило</button>
+        </div>
+    </form>
+</dialog>
+<dialog class="collection-dialog calendar-dialog" id="calendar-series-stop-dialog" aria-labelledby="calendar-series-stop-heading">
+    <header class="collection-dialog-header">
+        <h2 id="calendar-series-stop-heading">Остановить будущие повторения</h2>
+        <button class="button collection-secondary" type="button" data-dialog-close aria-label="Закрыть форму">
+            <svg class="icon" aria-hidden="true"><use href="#icon-close"/></svg>
+        </button>
+    </header>
+    <form id="calendar-series-stop-form" class="form-stack" method="post">
+        <div class="form-field">
+            <label for="calendar-series-stop-date">Остановить с даты включительно</label>
+            <input type="date" id="calendar-series-stop-date" name="from_date" required>
+        </div>
+        <p class="muted">Встречи с более ранней исходной датой и история ответов сохранятся.</p>
+        <p id="calendar-series-stop-error" class="form-errors" role="alert"></p>
+        <div class="collection-dialog-actions">
+            <button class="button collection-secondary" type="button" data-dialog-close>Закрыть</button>
+            <button class="button button-primary" id="calendar-series-stop-save" type="submit">Остановить повторения</button>
+        </div>
+    </form>
+</dialog>

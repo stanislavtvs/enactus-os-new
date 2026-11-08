@@ -1,3 +1,5 @@
+from datetime import date
+
 from django.core.exceptions import PermissionDenied
 from django.db import IntegrityError, OperationalError
 from django.http import HttpResponse
@@ -6,13 +8,17 @@ from ninja.errors import HttpError
 from ninja.security import django_auth
 
 from . import invitation_services as services
+from . import occurrence_rsvp
 from .invitation_schemas import (
     AudienceInput,
     AudiencePreview,
     AudienceSent,
     ManagedInvitations,
+    OccurrenceRSVPHistoryOutput,
+    OccurrenceRSVPInput,
     OwnInvitation,
     OwnInvitations,
+    OwnOccurrenceInvitation,
     RecipientOptions,
     RecipientOptionsQuery,
     RSVPStats,
@@ -150,3 +156,33 @@ def respond_to_invitation(request, response: HttpResponse, invitation_id: Record
     )
     response["Cache-Control"] = "no-store"
     return services.own_invitation_data(invitation)
+
+
+@router.get("/calendar/invitations/{invitation_id}/occurrences/{key}/", response=OwnOccurrenceInvitation)
+def own_occurrence(request, response: HttpResponse, invitation_id: RecordId, key: date):
+    response["Cache-Control"] = "no-store"
+    return _perform(occurrence_rsvp.own_occurrence, user=request.user, invitation_id=invitation_id, key=key)
+
+
+@router.post("/calendar/invitations/{invitation_id}/occurrences/{key}/respond/", response=OwnOccurrenceInvitation)
+def respond_to_occurrence(
+    request, response: HttpResponse, invitation_id: RecordId, key: date, payload: OccurrenceRSVPInput,
+):
+    response["Cache-Control"] = "no-store"
+    return _perform(
+        occurrence_rsvp.respond, user=request.user, invitation_id=invitation_id, key=key, **payload.model_dump(),
+    )
+
+
+@router.get(
+    "/{org_id}/events/{event_id}/occurrences/{key}/invitations/{invitation_id}/history/",
+    response=OccurrenceRSVPHistoryOutput,
+)
+def occurrence_history(
+    request, response: HttpResponse, org_id: RecordId, event_id: RecordId, invitation_id: RecordId, key: date,
+):
+    response["Cache-Control"] = "no-store"
+    return _perform(
+        occurrence_rsvp.history, user=request.user, org_id=org_id, event_id=event_id,
+        invitation_id=invitation_id, key=key,
+    )

@@ -93,3 +93,14 @@
     list-style: none;
 }
 .calendar-selected-members .button { min-height: 2rem; padding: .25rem .5rem; overflow-wrap: anywhere; }
+
+.calendar-invitation-occurrences {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--space-sm);
+    margin-block-start: var(--space-md);
+}
+.calendar-invitation-occurrences .calendar-invitation-filter { margin: 0; }
+#calendar-occurrence-select { width: 100%; min-width: 0; }
+.calendar-invitation-occurrences .calendar-invitation-card { background: var(--subtle); }
+.calendar-invitation-occurrences h3 { margin: 0; }

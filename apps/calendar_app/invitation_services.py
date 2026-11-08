@@ -81,7 +81,7 @@ def annotate_invited(rows, access):
 
 
 def _with_event(rows):
-    return rows.select_related("event__organization", "event__created_by__user")
+    return rows.select_related("event__organization", "event__created_by__user", "event__recurrence_rule")
 
 
 def own_invitation(*, access, invitation_id):
@@ -449,7 +449,10 @@ def _can_respond(invitation, event):
 
 
 def own_invitation_data(invitation):
+    from .recurrence import rule_data
+
     event = invitation.event
+    rule = getattr(event, "recurrence_rule", None)
     return {
         "id": invitation.pk,
         "event_id": event.pk,
@@ -463,6 +466,7 @@ def own_invitation_data(invitation):
         "responded_at": invitation.responded_at.isoformat() if invitation.responded_at is not None else None,
         "needs_reconfirmation": needs_reconfirmation(invitation, event),
         "can_respond": _can_respond(invitation, event),
+        "is_recurring": rule is not None,
         "event": {
             "id": event.pk,
             "title": event.title,
@@ -475,6 +479,7 @@ def own_invitation_data(invitation):
             "online_url": event.online_url or None,
             "status": event.status,
             "status_label": event.get_status_display(),
+            "recurrence": rule_data(rule),
         },
     }
 
