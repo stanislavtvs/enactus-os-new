@@ -1,0 +1,27 @@
+<div class="form-field">
+    <label for="project-name">Название</label>
+    <input id="project-name" name="name" required>
+</div>
+<div class="form-field">
+    <label for="project-description">Описание</label>
+    <textarea id="project-description" name="description" rows="4"></textarea>
+</div>
+<div class="project-fields">
+    <div class="form-field">
+        <label for="project-status">Статус</label>
+        <select id="project-status" name="status">
+            <option value="draft">Черновик</option>
+            <option value="active">Активен</option>
+            <option value="paused">На паузе</option>
+            <option value="completed">Завершён</option>
+        </select>
+    </div>
+    <div class="form-field">
+        <label for="project-start-date">Дата начала</label>
+        <input type="date" id="project-start-date" name="start_date">
+    </div>
+    <div class="form-field">
+        <label for="project-end-date">Плановая дата окончания</label>
+        <input type="date" id="project-end-date" name="planned_end_date">
+    </div>
+</div>

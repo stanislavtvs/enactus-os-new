@@ -23,6 +23,11 @@
     <p class="form-stack">
         <a class="button button-primary" href="{% url 'organization-access' org_id=organization.id %}">Роли и доступ</a>
     </p>
+    {% if can_open_projects %}
+        <p class="form-stack">
+            <a class="button button-primary" href="{% url 'organization-projects' org_id=organization.id %}">Проекты</a>
+        </p>
+    {% endif %}
     {% if can_manage_members %}
         <p class="form-stack">
             <a class="button button-primary" href="{% url 'organization-manage' org_id=organization.id %}">Управлять участниками</a>

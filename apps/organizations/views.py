@@ -2,6 +2,9 @@ from django.contrib.auth.decorators import login_required
 from django.shortcuts import get_object_or_404, render
 from django.urls import reverse
 
+from apps.access.policy import Access
+from apps.projects.services import can_open_projects
+
 from .onboarding import can_manage_members
 from .services import can_create_organization, visible_organizations
 
@@ -25,4 +28,5 @@ def organization_detail(request, org_id):
     return render(request, "organizations/detail.html", {
         "organization": organization,
         "can_manage_members": can_manage_members(request.user, organization),
+        "can_open_projects": can_open_projects(Access(request.user, organization)),
     })

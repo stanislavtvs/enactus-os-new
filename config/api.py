@@ -7,6 +7,7 @@ from apps.access.api import router as access_router
 from apps.departments.api import router as departments_router
 from apps.departments.membership_api import router as department_membership_router
 from apps.organizations.api import router as organizations_router
+from apps.projects.api import router as projects_router
 from apps.organizations.onboarding_api import router as onboarding_router
 
 
@@ -21,6 +22,7 @@ api = NinjaAPI(
     openapi_url="/openapi.json" if settings.DEBUG else None,
 )
 
+api.add_router("/organizations", projects_router)
 api.add_router("/organizations", access_router)
 api.add_router("/organizations", department_membership_router)
 api.add_router("/organizations", departments_router)

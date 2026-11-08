@@ -13,6 +13,8 @@ from apps.organizations.onboarding_views import (
 )
 from apps.organizations.views import organization_detail, organization_list
 
+from apps.projects.views import organization_project, organization_projects
+
 from .api import api
 
 urlpatterns = [
@@ -41,6 +43,12 @@ urlpatterns = [
         "organizations/<int:org_id>/access/",
         organization_access_page,
         name="organization-access",
+    ),
+    path("organizations/<int:org_id>/projects/", organization_projects, name="organization-projects"),
+    path(
+        "organizations/<int:org_id>/projects/<int:project_id>/",
+        organization_project,
+        name="organization-project",
     ),
     path("admin/", admin.site.urls),
     path("accounts/login/", LoginView.as_view(), name="login"),

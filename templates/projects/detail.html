@@ -1,0 +1,88 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Проект — {{ organization.name }} — Enactus OS{% endblock %}
+{% block extra_head %}
+    <link rel="stylesheet" href="{% static 'projects/projects.css' %}">
+    <script type="module" src="{% static 'projects/detail.js' %}"></script>
+{% endblock %}
+
+{% block content %}
+    <nav class="breadcrumbs" aria-label="Путь к странице">
+        <a href="{% url 'organization-detail' org_id=organization.id %}">{{ organization.name }}</a>
+        <span aria-hidden="true"> / </span>
+        <a href="{% url 'organization-projects' org_id=organization.id %}">Проекты</a>
+    </nav>
+    <header class="page-heading">
+        <p class="eyebrow">{{ organization.name }} · Проекты</p>
+        <h1 id="project-heading" tabindex="-1">Проект</h1>
+    </header>
+
+    <noscript><p>Включите JavaScript, чтобы загрузить проект.</p></noscript>
+    <div id="project-app" class="workspace-grid project-page"
+         data-api-url="{{ project_api_url }}" data-options-url="{{ project_options_url }}"
+         data-project-id="{{ project_id }}" data-org-name="{{ organization.name }}">
+        {% csrf_token %}
+        <div class="project-notices">
+            <p class="muted" id="project-load-status" role="status"></p>
+            <p class="form-errors" id="project-error" role="alert"></p>
+            <button class="button project-secondary" id="project-retry" type="button" hidden>Обновить проект</button>
+        </div>
+
+        <section class="card card-padded" id="project-info" aria-labelledby="project-info-heading" hidden>
+            <h2 id="project-info-heading">О проекте</h2>
+            <dl class="project-facts">
+                <div><dt>Статус</dt><dd id="project-info-status"></dd></div>
+                <div><dt>Дата начала</dt><dd id="project-info-start"></dd></div>
+                <div><dt>Плановое окончание</dt><dd id="project-info-end"></dd></div>
+                <div><dt>Руководитель</dt><dd id="project-info-lead"></dd></div>
+                <div><dt>Ответственное подразделение</dt><dd id="project-info-responsible"></dd></div>
+            </dl>
+            <p class="project-description" id="project-info-description"></p>
+            <div class="project-actions">
+                <button class="button project-secondary" id="project-archive" type="button" hidden>Архивировать проект</button>
+            </div>
+        </section>
+
+        <section class="card card-padded" id="project-edit-panel" aria-labelledby="project-edit-heading" hidden>
+            <h2 id="project-edit-heading">Основные сведения</h2>
+            <form method="post" id="project-edit-form" class="form-stack">
+                {% include "projects/fields.html" %}
+                <button class="button button-primary" type="submit">Сохранить сведения</button>
+            </form>
+        </section>
+
+        <section class="card card-padded" id="project-settings-panel" aria-labelledby="project-settings-heading" hidden>
+            <h2 id="project-settings-heading">Ответственные</h2>
+            <div class="project-fields">
+                <form method="post" id="project-responsible-form" class="form-stack" hidden>
+                    <div class="form-field">
+                        <label for="project-responsible">Ответственное подразделение</label>
+                        <select id="project-responsible" name="responsible_department_id"></select>
+                    </div>
+                    <button class="button button-primary" type="submit">Сохранить подразделение</button>
+                </form>
+                <form method="post" id="project-lead-form" class="form-stack" hidden>
+                    <div class="form-field">
+                        <label for="project-lead">Руководитель проекта</label>
+                        <select id="project-lead" name="lead_membership_id"></select>
+                    </div>
+                    <button class="button button-primary" type="submit">Сохранить руководителя</button>
+                </form>
+            </div>
+        </section>
+
+        <section class="card card-padded" id="project-departments-panel" aria-labelledby="project-departments-heading" hidden>
+            <h2 id="project-departments-heading">Участвующие подразделения</h2>
+            <p class="muted project-message" id="project-departments-empty" hidden>Участвующих подразделений пока нет.</p>
+            <ul class="project-list" id="project-departments-list" role="list"></ul>
+            <form method="post" id="project-department-form" class="form-stack" hidden>
+                <div class="form-field">
+                    <label for="project-department">Добавить подразделение</label>
+                    <select id="project-department" required></select>
+                </div>
+                <button class="button button-primary" type="submit">Добавить</button>
+            </form>
+        </section>
+    </div>
+{% endblock %}

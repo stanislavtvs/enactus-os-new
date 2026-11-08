@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Проекты — {{ organization.name }} — Enactus OS{% endblock %}
+{% block extra_head %}
+    <link rel="stylesheet" href="{% static 'projects/projects.css' %}">
+    <script type="module" src="{% static 'projects/list.js' %}"></script>
+{% endblock %}
+
+{% block content %}
+    <nav class="breadcrumbs" aria-label="Путь к странице">
+        <a href="{% url 'organization-list' %}">Мои организации</a>
+        <span aria-hidden="true"> / </span>
+        <a href="{% url 'organization-detail' org_id=organization.id %}">{{ organization.name }}</a>
+    </nav>
+    <header class="page-heading">
+        <p class="eyebrow">{{ organization.name }}</p>
+        <h1>Проекты</h1>
+        <p>Откройте проект, чтобы посмотреть его сроки, руководителя и участвующие подразделения.</p>
+    </header>
+
+    <noscript><p>Включите JavaScript, чтобы загрузить проекты.</p></noscript>
+    <div id="projects-app" class="workspace-grid project-page"
+         data-api-url="{{ project_api_url }}" data-options-url="{{ project_options_url }}"
+         data-page-url="{% url 'organization-projects' org_id=organization.id %}">
+        {% csrf_token %}
+        <div class="project-notices">
+            <p class="muted" id="projects-status" role="status"></p>
+            <p class="form-errors" id="projects-error" role="alert"></p>
+            <button class="button project-secondary" id="projects-retry" type="button" hidden>Обновить проекты</button>
+        </div>
+        <section class="card card-padded" aria-labelledby="projects-list-heading">
+            <h2 id="projects-list-heading">Доступные проекты</h2>
+            <div class="project-fields project-filters" id="projects-filters" hidden>
+                <div class="form-field">
+                    <label for="projects-search">Поиск по названию</label>
+                    <input type="search" id="projects-search">
+                </div>
+                <div class="form-field">
+                    <label for="projects-status-filter">Статус</label>
+                    <select id="projects-status-filter">
+                        <option value="">Все статусы</option>
+                        <option value="draft">Черновики</option>
+                        <option value="active">Активные</option>
+                        <option value="paused">На паузе</option>
+                        <option value="completed">Завершённые</option>
+                    </select>
+                </div>
+                <div class="form-field">
+                    <label for="projects-department-filter">Подразделение</label>
+                    <select id="projects-department-filter"></select>
+                </div>
+                <label class="project-checkbox"><input type="checkbox" id="projects-show-archived"> Показывать архивные</label>
+            </div>
+            <p class="muted project-message" id="projects-results" role="status"></p>
+            <ul id="projects-list" class="project-list" role="list"></ul>
+        </section>
+        <section class="card card-padded" id="project-create-panel" aria-labelledby="project-create-heading" hidden>
+            <h2 id="project-create-heading">Новый проект</h2>
+            <form method="post" class="form-stack" id="project-create-form">
+                {% include "projects/fields.html" %}
+                <div class="project-fields">
+                    <div class="form-field">
+                        <label for="project-create-responsible">Ответственное подразделение</label>
+                        <select id="project-create-responsible" name="responsible_department_id"></select>
+                    </div>
+                    <div class="form-field" id="project-create-lead-field" hidden>
+                        <label for="project-create-lead">Руководитель</label>
+                        <select id="project-create-lead" name="lead_membership_id"></select>
+                    </div>
+                </div>
+                <button class="button button-primary" type="submit">Создать проект</button>
+            </form>
+        </section>
+    </div>
+{% endblock %}
