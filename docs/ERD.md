@@ -229,3 +229,7 @@
 Миграция `organizations.0009_platform_creation` добавляет единственную строку `PlatformCreationPolicy`, выдачи `PlatformCreationGrant`, заявки `OrganizationCreationRequest` и квитанции идемпотентности `OrganizationCreationReceipt`. Квитанция связывает аккаунт и ключ создания с организацией. Частичное ограничение оставляет одну ожидающую заявку на аккаунт.
 
 `PlatformAuditEvent` хранит отдельную платформенную историю с защитой от изменения и удаления в PostgreSQL. `PlatformNotice` хранит сообщения получателям по заявкам независимо от наличия организации.
+
+## Фаза 7.5.4. Владелец и очередь сброса
+
+Миграция `organizations.0010_owner_account_integrity` добавляет PostgreSQL-защиту активности аккаунта владельца. Миграция `accounts.0003_password_reset_queue` создаёт `PasswordResetRequest` с адресом, временем постановки и следующей попытки, счётчиком попыток и индексом для выборки готовых записей. Worker удаляет обработанные и устаревшие записи.

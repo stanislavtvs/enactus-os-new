@@ -51,3 +51,13 @@ class AuthThrottle(models.Model):
     key = models.CharField(max_length=64, primary_key=True)
     window_started_at = models.DateTimeField()
     count = models.PositiveIntegerField(default=0)
+
+
+class PasswordResetRequest(models.Model):
+    email = models.EmailField(max_length=254)
+    created_at = models.DateTimeField(auto_now_add=True)
+    available_at = models.DateTimeField()
+    attempts = models.PositiveSmallIntegerField(default=0)
+
+    class Meta:
+        indexes = [models.Index(fields=["available_at", "id"], name="password_reset_due_idx")]

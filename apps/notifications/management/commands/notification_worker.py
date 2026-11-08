@@ -4,6 +4,7 @@ from time import monotonic, sleep
 from django.core.management.base import BaseCommand, CommandError
 from django.db import OperationalError, close_old_connections
 
+from apps.accounts.reset_queue import process_next_password_reset
 from apps.notifications.services import retry_due
 
 
@@ -48,6 +49,8 @@ class Command(BaseCommand):
                     retry_due(limit=limit)
                     if not stopping:
                         run_reminders(limit=limit)
+                    if not stopping:
+                        process_next_password_reset()
                 except OperationalError as exc:
                     if once:
                         raise CommandError("Notification worker could not complete the database operations.") from exc

@@ -1,6 +1,5 @@
 from django.contrib.auth import HASH_SESSION_KEY
 from django.contrib.auth.decorators import login_required
-from django.contrib.auth.forms import PasswordResetForm
 from django.contrib.auth.views import LoginView, PasswordChangeView, PasswordResetConfirmView, PasswordResetView
 from django.db import transaction
 from django.shortcuts import redirect, render
@@ -14,6 +13,7 @@ from django.views.decorators.http import require_GET, require_http_methods
 from . import services, throttle
 from .forms import ChangeEmailForm, RegistrationForm, ResendVerificationForm, VerifyRegistrationForm
 from .models import User
+from .reset_queue import enqueue_password_reset
 
 VERIFICATION_SESSION_KEY = "account_email_verification"
 RETRY_MESSAGE = "Слишком много попыток. Повторите позже."
@@ -156,9 +156,7 @@ class AccountPasswordResetView(PasswordResetView):
     def form_valid(self, form):
         address = services.normalize_email(form.cleaned_data["email"])
         if throttle.allow(self.request, "reset", address):
-            for user in PasswordResetForm().get_users(address):
-                if services.eligible_for_reset(user):
-                    services.send_password_reset(user)
+            enqueue_password_reset(address)
         return redirect(self.get_success_url())
 
 

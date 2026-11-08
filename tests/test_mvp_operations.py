@@ -8,7 +8,9 @@ from django.contrib.auth import get_user_model
 from django.core.management import call_command
 from django.db import OperationalError, connection
 from django.test import Client, TestCase
+from django.test.utils import CaptureQueriesContext
 
+from apps.access.policy import Access
 from apps.audit.models import AuditEvent
 from apps.calendar_app.models import CalendarEvent
 from apps.departments.models import Department, DepartmentMembership
@@ -294,3 +296,14 @@ class MVPOperationsTests(TestCase):
         self.assertEqual(audience["total"], 102)
         client.force_login(self.worker)
         measure("notifications", lambda: client.get("/api/v1/notifications/"))
+
+
+        grant(self.org, self.member, "tasks.view", department=self.department, descendants=True)
+        access = Access(self.worker, self.org)
+        started = perf_counter()
+        with CaptureQueriesContext(connection) as queries:
+            self.assertTrue(all(access.allows("tasks.view", team) for team in teams))
+        self.assertGreater(len(queries), 0)
+        self.assertLessEqual(len(queries), 4)
+        print(f"MVP inherited RBAC / {len(teams)} departments: {len(queries)} SQL queries, "
+              f"{(perf_counter() - started) * 1000:.1f} ms")

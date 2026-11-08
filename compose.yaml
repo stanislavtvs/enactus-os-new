@@ -57,7 +57,7 @@ services:
   worker:
     image: *app-image
     pull_policy: never
-    command: ["python", "manage.py", "notification_worker"]
+    command: ["sh", "-c", "umask 077 && exec python manage.py notification_worker"]
     environment: *app-environment
     depends_on:
       db:

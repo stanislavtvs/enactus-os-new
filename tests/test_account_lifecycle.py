@@ -1,4 +1,5 @@
 import re
+from io import StringIO
 from concurrent.futures import ThreadPoolExecutor
 from datetime import timedelta
 from threading import Barrier
@@ -8,13 +9,15 @@ from unittest.mock import patch
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.core import mail
+from django.core.management import call_command
 from django.db import IntegrityError, connections, transaction
 from django.test import Client, TestCase, TransactionTestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
 
 from apps.access.models import RoleAssignment
-from apps.accounts.models import AuthThrottle, EmailVerification
+from apps.accounts.models import AuthThrottle, EmailVerification, PasswordResetRequest
+from apps.accounts.reset_queue import process_next_password_reset
 from apps.accounts.services import account_reset_token_generator, confirm_verification, token_digest
 from apps.organizations.models import Organization, OrganizationMembership
 from apps.organizations.services import create_organization
@@ -30,7 +33,7 @@ class AccountLifecycleTests(TestCase):
         self.client = Client(enforce_csrf_checks=True)
         self.users = get_user_model().objects
 
-    def form(self, name, data, *, client=None, csrf=True, path=None, **headers):
+    def form(self, name, data, *, client=None, csrf=True, path=None, deliver_reset=True, **headers):
         client = client or self.client
         path = path or reverse(name)
         if csrf:
@@ -38,7 +41,10 @@ class AccountLifecycleTests(TestCase):
             headers["X-CSRFToken"] = client.cookies[settings.CSRF_COOKIE_NAME].value
         peer = headers.pop("REMOTE_ADDR", None)
         extra = {"REMOTE_ADDR": peer} if peer is not None else {}
-        return client.post(path, data, headers=headers, **extra)
+        response = client.post(path, data, headers=headers, **extra)
+        if name == "password_reset" and response.status_code == 302 and deliver_reset:
+            process_next_password_reset()
+        return response
 
     def register(self, username="new-account", email="new-account@example.invalid", **fields):
         return self.form("register", {
@@ -237,6 +243,49 @@ class AccountLifecycleTests(TestCase):
         self.assertEqual(len(mail.outbox), 1)
         self.assertEqual(mail.outbox[0].to, [verified.email])
         self.assertNotIn(PASSWORD, mail.outbox[0].body)
+
+    def test_reset_http_path_does_not_look_up_accounts_or_contact_mail_transport(self):
+        user = self.users.create_user(
+            username="queued-reset", email="queued-reset@example.invalid", password=PASSWORD,
+            email_verified_at=timezone.now(),
+        )
+        with (
+            patch("django.contrib.auth.forms.PasswordResetForm.get_users") as lookup,
+            patch("apps.accounts.services.send_account_mail") as transport,
+        ):
+            for address in (user.email, "queue-unknown@example.invalid"):
+                result = self.form("password_reset", {"email": address}, deliver_reset=False)
+                self.assertEqual(result.status_code, 302)
+                self.assertEqual(result["Location"], reverse("password_reset_done"))
+            lookup.assert_not_called()
+            transport.assert_not_called()
+        self.assertEqual(PasswordResetRequest.objects.count(), 2)
+        self.assertEqual(mail.outbox, [])
+        # Keep Django's enclosing TestCase transaction open during worker batches.
+        with patch("apps.notifications.management.commands.notification_worker.close_old_connections"):
+            call_command("notification_worker", once=True, stdout=StringIO())
+            self.assertEqual(PasswordResetRequest.objects.count(), 1)
+            call_command("notification_worker", once=True, stdout=StringIO())
+        self.assertFalse(PasswordResetRequest.objects.exists())
+        self.assertEqual([message.to for message in mail.outbox], [[user.email]])
+
+    def test_failed_reset_delivery_retries_but_expired_job_does_not_send(self):
+        user = self.users.create_user(
+            username="retry-reset", email="retry-reset@example.invalid", password=PASSWORD,
+            email_verified_at=timezone.now(),
+        )
+        self.assertEqual(self.form("password_reset", {"email": user.email}, deliver_reset=False).status_code, 302)
+        with patch("apps.accounts.reset_queue.send_password_reset", return_value=False) as transport:
+            self.assertTrue(process_next_password_reset())
+            self.assertFalse(process_next_password_reset())
+            self.assertEqual(transport.call_count, 1)
+            job = PasswordResetRequest.objects.get()
+            self.assertEqual(job.attempts, 1)
+            past = timezone.now() - timedelta(minutes=16)
+            PasswordResetRequest.objects.filter(pk=job.pk).update(available_at=past, created_at=past)
+            self.assertTrue(process_next_password_reset())
+            self.assertEqual(transport.call_count, 1)
+        self.assertFalse(PasswordResetRequest.objects.exists())
 
     def test_django_reset_invalidates_old_password_sessions_and_replay_without_touching_roles(self):
         user = self.users.create_superuser(

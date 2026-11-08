@@ -35,6 +35,7 @@ OBJECT_LABELS = {
 OWNERSHIP_TRANSFERRED = "organization.ownership_transferred"
 
 ACTION_LABELS = {
+    "ownership_recovered": "Административное восстановление владения",
     "module_changed": "Изменение доступности модуля",
     "ownership_transferred": "Передача владения", "member_added": "Включение участника",
     "created": "Создание", "updated": "Изменение", "archived": "Архивирование",

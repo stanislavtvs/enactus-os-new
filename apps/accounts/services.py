@@ -179,12 +179,13 @@ def send_password_reset(user):
     })
     url = absolute_url(path)
     if url:
-        send_account_mail(
+        return send_account_mail(
             "Восстановление пароля Enactus OS",
             f"Чтобы установить новый пароль, откройте ссылку:\n{url}\n\n"
             "Если вы не запрашивали восстановление, проигнорируйте это письмо.",
             user.email,
         )
+    return False
 
 
 def invalidate_pending_email(user):
