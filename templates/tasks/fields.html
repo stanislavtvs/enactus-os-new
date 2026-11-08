@@ -1,0 +1,27 @@
+<div class="form-field">
+    <label for="task-name">Название</label>
+    <input id="task-name" name="name" required>
+</div>
+<div class="form-field">
+    <label for="task-description">Описание</label>
+    <textarea id="task-description" name="description" rows="4"></textarea>
+</div>
+<div class="task-fields">
+    <div class="form-field">
+        <label for="task-priority">Приоритет</label>
+        <select id="task-priority" name="priority">
+            <option value="low">Низкий</option>
+            <option value="normal" selected>Обычный</option>
+            <option value="high">Высокий</option>
+        </select>
+    </div>
+    <div class="form-field">
+        <label for="task-start">Плановое начало</label>
+        <input id="task-start" type="datetime-local" name="planned_start_at" step="any">
+    </div>
+    <div class="form-field">
+        <label for="task-due">Срок выполнения</label>
+        <input id="task-due" type="datetime-local" name="due_at" step="any">
+    </div>
+</div>
+<p class="form-hint">Даты и время указаны в часовом поясе вашего устройства.</p>

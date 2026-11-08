@@ -1,6 +1,7 @@
 from django import forms
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import PermissionDenied
+from django.db import transaction
 from django.db.models import F
 from django.http import Http404
 from django.shortcuts import get_object_or_404, redirect, render
@@ -23,6 +24,12 @@ class WorkspaceSwitchForm(forms.Form):
 class ProjectAssignmentModeForm(forms.Form):
     mode = forms.ChoiceField(
         label="Способ включения в проект", choices=Organization.ProjectAssignmentMode.choices,
+    )
+
+
+class TaskAssignmentModeForm(forms.Form):
+    task_mode = forms.ChoiceField(
+        label="Способ назначения задач", choices=Organization.TaskAssignmentMode.choices,
     )
 
 
@@ -60,6 +67,7 @@ def organization_settings(request, org_id):
 
     status = 200
     assignment_form = ProjectAssignmentModeForm(initial={"mode": organization.project_assignment_mode})
+    task_assignment_form = TaskAssignmentModeForm(initial={"task_mode": organization.task_assignment_mode})
     form = PolicyForm(initial={"policy": organization.join_policy})
     if request.method == "POST" and request.POST.get("action") == "assignment_mode":
         assignment_form = ProjectAssignmentModeForm(request.POST)
@@ -72,6 +80,19 @@ def organization_settings(request, org_id):
                 status = 409
             else:
                 return redirect("organization-settings", org_id=org_id)
+    elif request.method == "POST" and request.POST.get("action") == "task_assignment_mode":
+        task_assignment_form = TaskAssignmentModeForm(request.POST)
+        status = 400
+        if task_assignment_form.is_valid():
+            with transaction.atomic():
+                organization = get_object_or_404(
+                    visible_organizations(request.user).select_for_update(of=("self",)), pk=org_id,
+                )
+                if not Access(request.user, organization).is_owner:
+                    raise PermissionDenied
+                organization.task_assignment_mode = task_assignment_form.cleaned_data["task_mode"]
+                organization.save(update_fields=["task_assignment_mode"])
+            return redirect("organization-settings", org_id=org_id)
     elif request.method == "POST":
         form = PolicyForm(request.POST)
         status = 400
@@ -87,6 +108,7 @@ def organization_settings(request, org_id):
         "organization": organization,
         "policy_form": form,
         "assignment_form": assignment_form,
+        "task_assignment_form": task_assignment_form,
     }, status=status)
 
 

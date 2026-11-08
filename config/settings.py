@@ -22,6 +22,7 @@ INSTALLED_APPS = [
     "apps.departments.apps.DepartmentsConfig",
     "apps.access.apps.AccessConfig",
     "apps.projects.apps.ProjectsConfig",
+    "apps.tasks.apps.TasksConfig",
 ]
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",

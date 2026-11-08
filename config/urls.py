@@ -26,6 +26,8 @@ from apps.projects.staffing_views import (
 )
 from apps.projects.views import organization_project, organization_projects
 
+from apps.tasks.views import organization_my_tasks, organization_task, organization_tasks, project_tasks
+
 from .api import api
 
 urlpatterns = [
@@ -76,6 +78,10 @@ urlpatterns = [
         staffing_request_page, name="organization-staffing-request",
     ),
     path("organizations/project-invitations/", project_invitation_page, name="project-invitations"),
+    path("organizations/<int:org_id>/tasks/", organization_tasks, name="organization-tasks"),
+    path("organizations/<int:org_id>/tasks/mine/", organization_my_tasks, name="organization-my-tasks"),
+    path("organizations/<int:org_id>/tasks/<int:task_id>/", organization_task, name="organization-task"),
+    path("organizations/<int:org_id>/projects/<int:project_id>/tasks/", project_tasks, name="project-tasks"),
     path("admin/", admin.site.urls),
     path("accounts/login/", LoginView.as_view(), name="login"),
     path("accounts/logout/", LogoutView.as_view(), name="logout"),

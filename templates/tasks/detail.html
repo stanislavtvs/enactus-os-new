@@ -1,0 +1,83 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Задача — {{ organization.name }} — Enactus OS{% endblock %}
+{% block extra_head %}
+    <link rel="stylesheet" href="{% static 'tasks/tasks.css' %}">
+    <script type="module" src="{% static 'tasks/detail.js' %}"></script>
+{% endblock %}
+
+{% block content %}
+    <nav class="breadcrumbs" aria-label="Путь к странице">
+        <a href="{% url 'organization-detail' org_id=organization.id %}">{{ organization.name }}</a>
+        <span aria-hidden="true"> / </span>
+        <a href="{{ task_list_url }}">Задачи</a>
+    </nav>
+    <header class="page-heading">
+        <p class="eyebrow">{{ organization.name }} · Задачи</p>
+        <h1 id="task-heading" tabindex="-1">Задача</h1>
+    </header>
+
+    <noscript><p>Включите JavaScript, чтобы загрузить задачу.</p></noscript>
+    <div id="task-app" class="workspace-grid tasks-page" data-org-url="{{ api_org_url }}"
+         data-task-id="{{ task_id }}" data-org-name="{{ organization.name }}">
+        {% csrf_token %}
+        <div class="task-notices">
+            <p id="task-load-status" class="muted" role="status"></p>
+            <p id="task-error" class="form-errors" role="alert"></p>
+            <button id="task-retry" type="button" class="button task-secondary" hidden>Обновить задачу</button>
+        </div>
+
+        <section class="card card-padded" id="task-info" aria-labelledby="task-info-heading" hidden>
+            <h2 id="task-info-heading">О задаче</h2>
+            <dl id="task-facts" class="task-fields task-facts"></dl>
+            <p id="task-info-description" class="task-description"></p>
+            <div class="task-actions task-gap">
+                <form id="task-status-form" class="task-actions" method="post" hidden>
+                    <div class="form-field">
+                        <label for="task-change-status">Новый статус</label>
+                        <select id="task-change-status" required></select>
+                    </div>
+                    <button class="button button-primary" type="submit">Изменить статус</button>
+                </form>
+                <button class="button task-secondary" id="task-archive" type="button" hidden>Архивировать задачу</button>
+            </div>
+        </section>
+
+        <section class="card card-padded" id="task-people" aria-labelledby="task-people-heading" hidden>
+            <h2 id="task-people-heading">Исполнители</h2>
+            <p id="task-current-assignee" class="task-gap"></p>
+            <form id="task-assignee-form" method="post" class="form-stack" hidden>
+                <div class="form-field">
+                    <label for="task-assignee">Основной исполнитель</label>
+                    <select id="task-assignee" name="assignee_id"></select>
+                </div>
+                <button class="button button-primary" type="submit">Сохранить исполнителя</button>
+            </form>
+
+            <h3>Соисполнители</h3>
+            <p id="task-collaborators-empty" class="muted" hidden>Соисполнителей пока нет.</p>
+            <ul id="task-collaborators" class="task-list" role="list"></ul>
+            <form id="task-collaborator-form" method="post" class="form-stack" hidden>
+                <div class="form-field">
+                    <label for="task-collaborator">Добавить соисполнителя</label>
+                    <select id="task-collaborator" name="collaborator_id" required></select>
+                </div>
+                <button class="button button-primary" type="submit">Добавить соисполнителя</button>
+            </form>
+        </section>
+
+        <section class="card card-padded" id="task-edit-panel" aria-labelledby="task-edit-heading" hidden>
+            <h2 id="task-edit-heading">Редактировать задачу</h2>
+            <form id="task-edit-form" class="form-stack" method="post">
+                {% include "tasks/fields.html" %}
+                <div class="form-field" id="task-edit-department-field" hidden>
+                    <label for="task-edit-department">Подразделение</label>
+                    <select id="task-edit-department" name="department_id"></select>
+                </div>
+                <p id="task-edit-error" class="form-errors" role="alert"></p>
+                <button class="button button-primary" type="submit">Сохранить задачу</button>
+            </form>
+        </section>
+    </div>
+{% endblock %}

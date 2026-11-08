@@ -10,7 +10,7 @@
     <header class="page-heading">
         <p class="eyebrow">{{ organization.name }}</p>
         <h1>Настройки организации</h1>
-        <p>Настройте вступление в организацию и включение в проектные команды.</p>
+        <p>Настройте вступление в организацию, включение в проектные команды и назначение задач.</p>
     </header>
     <section class="card card-padded onboarding" aria-labelledby="organization-policy-heading">
         <h2 id="organization-policy-heading">Правила вступления</h2>
@@ -38,6 +38,20 @@
                 {% if assignment_form.mode.errors %}<div class="form-errors" role="alert">{{ assignment_form.mode.errors }}</div>{% endif %}
             </div>
             <button class="button button-primary" type="submit">Сохранить способ включения</button>
+        </form>
+    </section>
+    <section class="card card-padded onboarding" aria-labelledby="task-assignment-heading">
+        <h2 id="task-assignment-heading">Назначение задач</h2>
+        <p>В режиме распределения через подразделение задачи пока создаются без исполнителя.</p>
+        <form class="form-stack" method="post">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="task_assignment_mode">
+            <div class="form-field settings-field">
+                {{ task_assignment_form.task_mode.label_tag }}
+                {{ task_assignment_form.task_mode }}
+                {% if task_assignment_form.task_mode.errors %}<div class="form-errors" role="alert">{{ task_assignment_form.task_mode.errors }}</div>{% endif %}
+            </div>
+            <button class="button button-primary" type="submit">Сохранить способ назначения</button>
         </form>
     </section>
 {% endblock %}

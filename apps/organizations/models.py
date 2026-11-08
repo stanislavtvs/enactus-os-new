@@ -6,6 +6,10 @@ ORGANIZATION_NAME_MAX_LENGTH = 200
 
 
 class Organization(models.Model):
+    class TaskAssignmentMode(models.TextChoices):
+        DEPARTMENT = "department", "Через подразделение"
+        DIRECT = "direct", "Прямое назначение"
+
     class ProjectAssignmentMode(models.TextChoices):
         DIRECT = "direct", "Прямое назначение"
         INVITATION = "invitation", "Приглашение с подтверждением"
@@ -26,6 +30,11 @@ class Organization(models.Model):
         related_name="owned_organizations",
     )
     created_at = models.DateTimeField(auto_now_add=True)
+    task_assignment_mode = models.CharField(
+        max_length=10,
+        choices=TaskAssignmentMode,
+        default=TaskAssignmentMode.DEPARTMENT,
+    )
     project_assignment_mode = models.CharField(
         max_length=10,
         choices=ProjectAssignmentMode,

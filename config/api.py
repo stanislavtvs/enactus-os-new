@@ -3,6 +3,8 @@ from typing import Literal
 from django.conf import settings
 from ninja import NinjaAPI, Schema
 
+from apps.tasks.api import router as tasks_router
+
 from apps.access.api import router as access_router
 from apps.departments.api import router as departments_router
 from apps.departments.membership_api import router as department_membership_router
@@ -23,6 +25,7 @@ api = NinjaAPI(
     openapi_url="/openapi.json" if settings.DEBUG else None,
 )
 
+api.add_router("/organizations", tasks_router)
 api.add_router("/organizations", staffing_router)
 api.add_router("/organizations", projects_router)
 api.add_router("/organizations", access_router)

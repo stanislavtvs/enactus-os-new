@@ -88,4 +88,24 @@
             </form>
         </section>
     </div>
+    {% if can_open_project_tasks %}
+        <section class="card card-padded overview-info" id="project-tasks-preview" aria-labelledby="project-tasks-preview-heading">
+            <h2 id="project-tasks-preview-heading">Задачи проекта</h2>
+            {% if project_tasks_preview %}
+                <ul class="project-list" role="list">
+                    {% for task in project_tasks_preview %}
+                        <li class="project-row">
+                            <a href="{% url 'organization-task' org_id=organization.id task_id=task.id %}">{{ task.name }}</a>
+                            <span class="project-badge">{{ task.get_status_display }}</span>
+                        </li>
+                    {% endfor %}
+                </ul>
+            {% else %}
+                <p class="muted project-message">Доступных задач проекта пока нет.</p>
+            {% endif %}
+            <p class="overview-info">
+                <a class="button project-secondary" href="{% url 'project-tasks' org_id=organization.id project_id=project_id %}">Все задачи проекта</a>
+            </p>
+        </section>
+    {% endif %}
 {% endblock %}

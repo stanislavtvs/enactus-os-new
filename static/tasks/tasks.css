@@ -1,0 +1,46 @@
+.tasks-page .form-field select, .tasks-page .form-field textarea {
+    width: 100%;
+    min-height: 2.75rem;
+    padding: 0.55rem 0.7rem;
+    border: 1px solid var(--input-line);
+    border-radius: 0.55rem;
+    background: var(--surface);
+    color: var(--ink);
+    font: inherit;
+}
+.tasks-page textarea { resize: vertical; }
+.task-fields {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(14rem, 100%), 1fr));
+    gap: var(--space-md);
+}
+.task-gap:not(:empty) { margin-top: var(--space-sm); }
+.task-checkbox { display: inline-flex; align-items: center; align-self: end; gap: var(--space-xs); min-height: 2.75rem; }
+.task-notices:not(:has(button:not([hidden]))):not(:has(p:not(:empty))) { margin-bottom: calc(-1 * var(--space-md)); }
+.tasks-page button:not([hidden]) { scroll-margin-block-start: 5rem; }
+.task-list { padding: 0; margin: var(--space-sm) 0 0; list-style: none; }
+.task-list:empty { margin: 0; }
+.task-row, .task-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-xs) var(--space-sm);
+}
+.task-row {
+    justify-content: space-between;
+    padding: var(--space-sm) 0;
+    border-top: 1px solid var(--line);
+    overflow-wrap: anywhere;
+}
+.task-row > div { min-width: 0; }
+.task-row a { font-weight: 650; }
+.task-meta { color: var(--muted); font-size: 0.88rem; }
+.task-badge { display: inline-block; margin: 0.2rem 0.2rem 0 0; padding: 0.15rem 0.4rem; border-radius: 0.4rem; color: var(--muted); background: var(--subtle); font-size: 0.82rem; }
+.task-badge-overdue { color: var(--error); }
+.task-facts { margin-block: var(--space-md); }
+.task-facts dt { color: var(--muted); font-size: 0.85rem; }
+.task-facts dd { margin: var(--space-xs) 0 0; font-weight: 650; overflow-wrap: anywhere; }
+.task-description { white-space: pre-wrap; overflow-wrap: anywhere; }
+.task-actions form { align-items: end; }
+.task-secondary { border-color: var(--line); color: var(--ink); background: var(--surface); }
+.task-secondary:hover { background: var(--subtle); }
