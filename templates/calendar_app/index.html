@@ -1,0 +1,194 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Календарь — {{ organization.name }} — Enactus OS{% endblock %}
+{% block extra_head %}
+    <link rel="stylesheet" href="{% static 'ui/collection.css' %}">
+    <link rel="stylesheet" href="{% static 'calendar_app/calendar.css' %}">
+    <script type="module" src="{% static 'calendar_app/calendar.js' %}"></script>
+{% endblock %}
+
+{% block content %}
+    <nav class="breadcrumbs" aria-label="Путь к странице">
+        <a href="{% url 'organization-detail' org_id=organization.id %}">{{ organization.name }}</a>
+    </nav>
+    <div id="calendar-app" data-org-url="{{ api_org_url }}">
+        {% csrf_token %}
+        <header class="page-heading collection-header">
+            <div>
+                <p class="eyebrow">{{ organization.name }}</p>
+                <h1>Календарь</h1>
+            </div>
+            <button class="button button-primary" id="calendar-create" type="button" aria-haspopup="dialog" aria-controls="calendar-editor" hidden>
+                <svg class="collection-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+                Новое событие
+            </button>
+        </header>
+
+        <noscript><p>Включите JavaScript, чтобы загрузить календарь.</p></noscript>
+        <div class="collection-toolbar calendar-toolbar" id="calendar-toolbar" hidden>
+            <div class="calendar-period-actions" role="group" aria-label="Выбор периода">
+                <button class="button collection-secondary calendar-arrow" id="calendar-previous" type="button" aria-label="Предыдущий период" title="Предыдущий период">
+                    <svg class="icon" aria-hidden="true"><use href="#icon-arrow"/></svg>
+                </button>
+                <button class="button collection-secondary" id="calendar-today" type="button">Сегодня</button>
+                <button class="button collection-secondary calendar-arrow" id="calendar-next" type="button" aria-label="Следующий период" title="Следующий период">
+                    <svg class="icon" aria-hidden="true"><use href="#icon-arrow"/></svg>
+                </button>
+            </div>
+            <div class="calendar-modes" role="group" aria-label="Режим календаря">
+                <button type="button" data-calendar-mode="month" aria-pressed="true">Месяц</button>
+                <button type="button" data-calendar-mode="week" aria-pressed="false">Неделя</button>
+                <button type="button" data-calendar-mode="day" aria-pressed="false">День</button>
+            </div>
+            <details class="collection-filters" id="calendar-filters">
+                <summary class="button collection-secondary">
+                    <svg class="collection-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 7h14M8 12h8m-5 5h2"/></svg>
+                    Фильтры
+                </summary>
+                <div class="collection-filter-fields">
+                    <div class="form-field">
+                        <label for="calendar-source-filter">Тип записи</label>
+                        <select id="calendar-source-filter">
+                            <option value="">Все записи</option>
+                            <option value="task_deadline">Дедлайны задач</option>
+                            <option value="meeting">Встречи</option>
+                            <option value="event">Мероприятия</option>
+                        </select>
+                    </div>
+                    <div class="form-field">
+                        <label for="calendar-project-filter">Проект</label>
+                        <select id="calendar-project-filter"><option value="">Все проекты</option></select>
+                    </div>
+                    <div class="form-field">
+                        <label for="calendar-department-filter">Подразделение</label>
+                        <select id="calendar-department-filter"><option value="">Все подразделения</option></select>
+                    </div>
+                    <label class="calendar-check"><input type="checkbox" id="calendar-archive-filter"> Показывать архивные</label>
+                    <div class="form-field">
+                        <label for="calendar-timezone">Часовой пояс календаря</label>
+                        <input id="calendar-timezone" aria-describedby="calendar-timezone-error" list="calendar-timezones" spellcheck="false" autocomplete="off">
+                        <p id="calendar-timezone-error" class="form-errors" role="alert"></p>
+                    </div>
+                </div>
+            </details>
+        </div>
+        <datalist id="calendar-timezones"></datalist>
+
+        <div class="calendar-period">
+            <h2 id="calendar-period" tabindex="-1"></h2>
+            <span id="calendar-period-zone" class="muted"></span>
+        </div>
+        <p id="calendar-feedback" class="collection-feedback" role="status"></p>
+        <p id="calendar-status" class="muted calendar-message" role="status"></p>
+        <p id="calendar-error" class="form-errors calendar-message" role="alert"></p>
+        <button class="button collection-secondary" id="calendar-retry" type="button" hidden>Обновить календарь</button>
+        <div id="calendar-view" aria-labelledby="calendar-period"></div>
+
+        <dialog class="collection-dialog calendar-dialog" id="calendar-editor" aria-labelledby="calendar-editor-heading">
+            <header class="collection-dialog-header">
+                <h2 id="calendar-editor-heading">Новое событие</h2>
+                <button class="button collection-secondary" type="button" data-dialog-close aria-label="Закрыть форму">
+                    <svg class="icon" aria-hidden="true"><use href="#icon-close"/></svg>
+                </button>
+            </header>
+            <form id="calendar-event-form" class="form-stack" method="post">
+                <div class="calendar-fields">
+                    <div class="form-field">
+                        <label for="calendar-event-title">Название</label>
+                        <input id="calendar-event-title" name="title" maxlength="200" required>
+                    </div>
+                    <div class="form-field">
+                        <label for="calendar-event-type">Тип</label>
+                        <select id="calendar-event-type" name="type">
+                            <option value="meeting">Встреча</option>
+                            <option value="event">Мероприятие</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="form-field">
+                    <label for="calendar-event-description">Описание</label>
+                    <textarea id="calendar-event-description" name="description" rows="2"></textarea>
+                </div>
+                <div class="calendar-fields">
+                    <div class="form-field">
+                        <label for="calendar-event-timezone">Часовой пояс события</label>
+                        <input id="calendar-event-timezone" name="timezone" list="calendar-timezones" spellcheck="false" autocomplete="off" required>
+                    </div>
+                    <label class="calendar-check"><input id="calendar-event-all-day" name="all_day" type="checkbox"> Весь день</label>
+                </div>
+                <div class="calendar-fields" id="calendar-timed-fields">
+                    <div class="form-field">
+                        <label for="calendar-event-start">Начало</label>
+                        <input id="calendar-event-start" name="timed_start" type="datetime-local" step="any">
+                        <div class="form-field" id="calendar-start-fold-field" hidden>
+                            <label for="calendar-start-fold">Вариант времени начала</label>
+                            <select id="calendar-start-fold"></select>
+                        </div>
+                    </div>
+                    <div class="form-field">
+                        <label for="calendar-event-end">Окончание</label>
+                        <input id="calendar-event-end" name="timed_end" type="datetime-local" step="any">
+                        <div class="form-field" id="calendar-end-fold-field" hidden>
+                            <label for="calendar-end-fold">Вариант времени окончания</label>
+                            <select id="calendar-end-fold"></select>
+                        </div>
+                    </div>
+                </div>
+                <div class="calendar-fields" id="calendar-all-day-fields" hidden>
+                    <div class="form-field">
+                        <label for="calendar-event-first-day">Первый день</label>
+                        <input id="calendar-event-first-day" name="first_day" type="date">
+                    </div>
+                    <div class="form-field">
+                        <label for="calendar-event-last-day">Последний день</label>
+                        <input id="calendar-event-last-day" name="last_day" type="date">
+                    </div>
+                </div>
+                <div class="calendar-fields">
+                    <div class="form-field">
+                        <label for="calendar-event-location">Место</label>
+                        <input id="calendar-event-location" name="location" maxlength="240">
+                    </div>
+                    <div class="form-field">
+                        <label for="calendar-event-url">Ссылка на онлайн-встречу</label>
+                        <input id="calendar-event-url" name="online_url" type="url" maxlength="2048">
+                    </div>
+                </div>
+                <div class="calendar-fields">
+                    <div class="form-field" id="calendar-event-project-field">
+                        <label for="calendar-event-project">Проект</label>
+                        <select id="calendar-event-project" name="project_id"></select>
+                    </div>
+                    <div class="form-field" id="calendar-event-department-field">
+                        <label for="calendar-event-department">Подразделение</label>
+                        <select id="calendar-event-department" name="department_id"></select>
+                    </div>
+                </div>
+                <p id="calendar-form-error" class="form-errors" role="alert"></p>
+                <div class="collection-dialog-actions">
+                    <button class="button collection-secondary" type="button" data-dialog-close>Закрыть</button>
+                    <button class="button button-primary" id="calendar-event-save" type="submit">Сохранить</button>
+                </div>
+            </form>
+        </dialog>
+
+        <dialog class="collection-dialog calendar-dialog" id="calendar-event-detail" aria-labelledby="calendar-event-detail-heading">
+            <header class="collection-dialog-header">
+                <h2 id="calendar-event-detail-heading">Событие</h2>
+                <button class="button collection-secondary" type="button" data-dialog-close aria-label="Закрыть событие">
+                    <svg class="icon" aria-hidden="true"><use href="#icon-close"/></svg>
+                </button>
+            </header>
+            <p id="calendar-detail-status" class="muted calendar-message" role="status"></p>
+            <p id="calendar-detail-error" class="form-errors calendar-message" role="alert"></p>
+            <dl id="calendar-detail-facts" class="calendar-fields calendar-facts"></dl>
+            <p id="calendar-detail-description" class="calendar-description"></p>
+            <div id="calendar-detail-actions" class="collection-dialog-actions" hidden>
+                <button class="button collection-secondary" id="calendar-event-edit" type="button" hidden>Редактировать</button>
+                <button class="button collection-secondary" id="calendar-event-cancel" type="button" hidden>Отменить событие</button>
+                <button class="button collection-secondary" id="calendar-event-archive" type="button" hidden>Архивировать</button>
+            </div>
+        </dialog>
+    </div>
+{% endblock %}

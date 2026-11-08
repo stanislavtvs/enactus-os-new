@@ -1,6 +1,7 @@
 from django.urls import reverse
 
 from apps.access.policy import Access, Permission
+from apps.calendar_app.services import can_open_calendar
 from apps.projects.services import can_open_projects
 from apps.projects.staffing import can_open_staffing
 from apps.tasks.distribution import can_open_distribution
@@ -23,6 +24,7 @@ SCOPED_ROUTES = {
     "organization-access",
     "project-team",
     "organization-tasks",
+    "organization-calendar",
     "organization-my-tasks",
     "organization-task-distribution",
     "organization-task-reviews",
@@ -46,6 +48,7 @@ PAGE_TITLES = {
     "organization-project": "Проект",
     "project-team": "Команда проекта",
     "organization-tasks": "Задачи",
+    "organization-calendar": "Календарь",
     "organization-my-tasks": "Мои задачи",
     "organization-task-distribution": "Распределение задач",
     "organization-task-reviews": "Проверка задач",
@@ -113,6 +116,7 @@ def _workspace_links(request, workspace, route):
             can_open_staffing(access), ("organization-staffing-request",),
         ),
         ("organization-tasks", "Задачи", "org", can_open_tasks(access), ("organization-task", "project-tasks")),
+        ("organization-calendar", "Календарь", "calendar", can_open_calendar(access), ()),
         ("organization-my-tasks", "Мои задачи", "user", True, ()),
         ("organization-task-distribution", "Распределение задач", "arrow", can_open_distribution(access), ()),
         ("organization-task-reviews", "Проверка задач", "invite", can_open_review_inbox(access), ()),

@@ -23,6 +23,7 @@ INSTALLED_APPS = [
     "apps.access.apps.AccessConfig",
     "apps.projects.apps.ProjectsConfig",
     "apps.tasks.apps.TasksConfig",
+    "apps.calendar_app.apps.CalendarConfig",
 ]
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",

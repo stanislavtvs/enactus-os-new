@@ -96,6 +96,13 @@ class Task(models.Model):
     )
 
     class Meta:
+        indexes = [
+            models.Index(
+                fields=["organization", "due_at"],
+                condition=Q(due_at__isnull=False),
+                name="task_org_calendar_due_idx",
+            ),
+        ]
         constraints = [
             models.UniqueConstraint(fields=["organization", "id"], name="unique_task_organization_id"),
             models.CheckConstraint(condition=~Q(parent_id=F("id")), name="task_parent_is_not_self"),

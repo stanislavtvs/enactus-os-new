@@ -3,6 +3,7 @@ from django.contrib.auth.views import LoginView, LogoutView
 from django.urls import path
 
 from apps.access.views import organization_access_page
+from apps.calendar_app.views import organization_calendar
 from apps.departments.views import department_invitations, department_members, department_structure
 from apps.organizations.onboarding_views import (
     organization_invitations,
@@ -86,6 +87,7 @@ urlpatterns = [
     ),
     path("organizations/project-invitations/", project_invitation_page, name="project-invitations"),
     path("organizations/<int:org_id>/tasks/", organization_tasks, name="organization-tasks"),
+    path("organizations/<int:org_id>/calendar/", organization_calendar, name="organization-calendar"),
     path("organizations/<int:org_id>/tasks/mine/", organization_my_tasks, name="organization-my-tasks"),
     path(
         "organizations/<int:org_id>/tasks/distribution/", organization_task_queue,

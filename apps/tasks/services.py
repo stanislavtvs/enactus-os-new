@@ -78,10 +78,7 @@ def _task_rows(access, *, lock=False):
         "reviewer__user", "organization",
         "priority_level", "workflow_status",
     ).annotate(
-        _my_collaboration=Exists(TaskCollaborator.objects.filter(
-            organization=organization, task_id=OuterRef("pk"),
-            organization_membership=access.membership, is_active=True,
-        )),
+        _my_collaboration=_collaboration_exists(access),
         _active_project_assignee=Exists(ProjectMembership.objects.filter(
             organization=organization, project_id=OuterRef("project_id"),
             organization_membership_id=OuterRef("assignee_id"), is_active=True,
@@ -122,12 +119,33 @@ def visible_task(*, access, task_id):
     return task
 
 
-def _visible_rows(access):
+def _collaboration_exists(access):
+    return Exists(TaskCollaborator.objects.filter(
+        organization=access.organization, task_id=OuterRef("pk"),
+        organization_membership=access.membership, is_active=True,
+    ))
+
+
+def _visible_rows(access, rows=None):
     if access.membership is None:
         return access.organization.tasks.none()
     projects = visible_projects(access=access)
-    rows = _task_rows(access).filter(Q(project__isnull=True) | Q(project_id__in=[p.pk for p in projects]))
+    if rows is None:
+        rows = _task_rows(access)
+    rows = rows.filter(Q(project__isnull=True) | Q(project_id__in=[p.pk for p in projects]))
     return _task_access_filter(access, rows)
+
+
+def visible_task_deadlines(*, access, start, end, project_id=None, department_id=None, include_archived=False):
+    rows = access.organization.tasks.filter(due_at__gte=start, due_at__lt=end)
+    if not include_archived:
+        rows = rows.filter(is_archived=False)
+    if project_id is not None:
+        rows = rows.filter(project_id=project_id)
+    if department_id is not None:
+        rows = rows.filter(department_id=department_id)
+    rows = rows.alias(_my_collaboration=_collaboration_exists(access)).select_related("workflow_status")
+    return _visible_rows(access, rows).order_by("due_at", "pk")
 
 
 def visible_parent_names(access, tasks):

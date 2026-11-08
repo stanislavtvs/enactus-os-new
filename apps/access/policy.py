@@ -43,6 +43,12 @@ class Permission(models.TextChoices):
     TASKS_STATUSES_MANAGE = "tasks.statuses.manage", "Управлять пользовательскими статусами задач"
     TASKS_TRANSITIONS_MANAGE = "tasks.transitions.manage", "Управлять переходами задач"
     TASKS_STATUS_EXECUTE = "tasks.status.execute", "Менять статус назначенной задачи по доступному переходу"
+    CALENDAR_READ = "calendar.read", "Просматривать события календаря"
+    CALENDAR_CREATE = "calendar.create", "Создавать события календаря"
+    CALENDAR_UPDATE = "calendar.update", "Редактировать события календаря"
+    CALENDAR_CANCEL = "calendar.cancel", "Отменять события календаря"
+    CALENDAR_ARCHIVE = "calendar.archive", "Архивировать события календаря"
+    CALENDAR_MANAGE_SCOPE = "calendar.manage_scope", "Управлять событиями проектов и подразделений"
     ROLES_READ = "roles.read", "Просматривать роли"
     ROLES_MANAGE = "roles.manage", "Управлять ролями"
 
