@@ -1,0 +1,47 @@
+<section class="card card-padded" id="task-dependencies" aria-labelledby="task-dependencies-heading" hidden>
+    <div class="task-section-header">
+        <h2 id="task-dependencies-heading" tabindex="-1">Зависимости</h2>
+        <button class="button button-primary" id="task-add-dependency" type="button" aria-label="Добавить зависимость" aria-haspopup="dialog" hidden>
+            <svg class="collection-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+            Зависимость
+        </button>
+    </div>
+    <p id="task-dependency-summary" class="task-meta task-gap"></p>
+    <p id="task-dependencies-notice" class="collection-feedback task-gap" role="status"></p>
+    <p id="task-dependencies-error" class="form-errors task-gap" role="alert"></p>
+    <p id="task-dependencies-empty" class="muted task-gap" hidden>Предшествующих задач пока нет.</p>
+    <ul id="task-dependency-list" class="task-list" role="list"></ul>
+</section>
+
+<dialog id="task-dependency-dialog" class="collection-dialog" aria-labelledby="task-dependency-dialog-heading">
+    <header class="collection-dialog-header">
+        <h2 id="task-dependency-dialog-heading">Новая зависимость</h2>
+        <button type="button" class="button collection-secondary" data-dialog-close aria-label="Закрыть форму">
+            <svg class="icon" aria-hidden="true"><use href="#icon-close"/></svg>
+        </button>
+    </header>
+    <form id="task-dependency-form" class="form-stack" method="post">
+        <div class="form-field">
+            <label for="task-dependency-search">Найти предшествующую задачу</label>
+            <input type="search" id="task-dependency-search" maxlength="200">
+        </div>
+        <div class="form-field">
+            <label for="task-dependency-predecessor">Предшествующая задача</label>
+            <select id="task-dependency-predecessor" name="predecessor_id" required></select>
+            <p id="task-dependency-search-status" class="form-hint" role="status"></p>
+        </div>
+        <div class="form-field">
+            <label for="task-dependency-kind">Тип зависимости</label>
+            <select id="task-dependency-kind" name="kind">
+                <option value="informational">Информационная</option>
+                <option value="strict">Строгая</option>
+            </select>
+            <p class="form-hint">Информационная связь показывает предупреждение. Строгая не даёт начать работу до завершения предшествующей задачи.</p>
+        </div>
+        <p id="task-dependency-form-error" class="form-errors" role="alert"></p>
+        <div class="collection-dialog-actions">
+            <button class="button collection-secondary" type="button" data-dialog-close>Отмена</button>
+            <button class="button button-primary" id="task-dependency-save" type="submit">Добавить зависимость</button>
+        </div>
+    </form>
+</dialog>

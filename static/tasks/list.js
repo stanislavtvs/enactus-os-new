@@ -46,6 +46,12 @@ function taskRow(task) {
     if (task.distribution_pending) {
         badges.push({text: "Ожидает распределения"});
     }
+    if (task.has_blocking_dependencies) {
+        badges.push({text: "Начало заблокировано", kind: "danger"});
+    }
+    if (task.has_dependency_warnings) {
+        badges.push({text: "Предупреждение о зависимости"});
+    }
     if (mine) {
         const me = options?.current_membership_id;
         if (task.assignee?.id === me) {
@@ -71,6 +77,7 @@ function taskRow(task) {
             {label: "Срок", value: task.due_at ? dateLabel(task.due_at) : "—"},
             {label: "Проект", value: task.project?.name},
             {label: "Подразделение", value: task.department?.name},
+            {label: "Родительская задача", value: task.parent?.name},
         ],
         badges,
         canEdit: task.permissions.update,

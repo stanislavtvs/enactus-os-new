@@ -24,6 +24,8 @@ from .services import (
     _task_is_writable,
     _task_rows,
     _task_visible,
+    has_blocking_dependencies,
+    require_no_blocking_dependencies,
 )
 
 SUBMIT = "tasks.review.submit"
@@ -141,6 +143,7 @@ def can_submit(access, task):
         and _task_visible(access, task) and _task_is_writable(task)
         and task.status in (Task.Status.PENDING, Task.Status.IN_PROGRESS)
         and _assignee_is_active(task) and not _has_pending_distribution(task)
+        and not has_blocking_dependencies(task)
         and access.allows(SUBMIT, _context(task.project, task.department))
     )
 
@@ -285,6 +288,7 @@ def submit_review(*, user, org_id, task_id, comment, links):
     access, task = _managed_task(user, org_id, task_id, SUBMIT)
     if task.assignee_id != access.membership.pk:
         raise PermissionDenied
+    require_no_blocking_dependencies(task)
     if not can_submit(access, task):
         raise TaskConflict("Отправить результат может действующий исполнитель открытой задачи.")
     policy = effective_policy(task)

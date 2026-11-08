@@ -6,7 +6,7 @@ from pydantic import AwareDatetime, ConfigDict, Field, HttpUrl, StringConstraint
 
 from apps.organizations.models import Organization
 
-from .models import TASK_NAME_MAX_LENGTH, Task
+from .models import TASK_NAME_MAX_LENGTH, Task, TaskDependency
 
 RecordId = Annotated[int, Field(gt=0, le=2**63 - 1)]
 InputId = Annotated[int, Field(gt=0, le=2**63 - 1, strict=True)]
@@ -32,8 +32,12 @@ class TaskChangeInput(Schema):
         return value
 
 
-class TaskInput(TaskChangeInput):
+class SubtaskInput(TaskChangeInput):
     project_id: InputId | None = None
+
+
+class TaskInput(SubtaskInput):
+    parent_id: InputId | None = None
 
 
 class AssigneeInput(Schema):
@@ -96,6 +100,12 @@ class TaskOutput(Schema):
     collaborators: list[MemberOutput]
     project: NamedObject | None
     department: NamedObject | None
+    parent_id: int | None
+    parent: NamedObject | None
+    has_unfinished_children: bool
+    can_view_decomposition: bool
+    has_blocking_dependencies: bool
+    has_dependency_warnings: bool
     permissions: TaskPermissions
     allowed_statuses: list[Task.Status]
 
@@ -105,6 +115,139 @@ class TaskListOutput(Schema):
     total: int
     page: int
     page_size: int
+
+
+class HierarchyQuery(Schema):
+    page: Annotated[int, Field(ge=1, le=2**31 - 1)] = 1
+    page_size: Annotated[int, Field(ge=1, le=100)] = 50
+
+
+class ParentInput(Schema):
+    model_config = ConfigDict(extra="forbid")
+
+    parent_id: InputId | None
+
+
+class SubtaskOutput(Schema):
+    id: int
+    parent_id: int | None
+    name: str
+    status: Task.Status
+    assignee: MemberOutput | None
+    due_at: datetime | None
+    is_archived: bool
+
+
+class SubtaskListOutput(Schema):
+    items: list[SubtaskOutput]
+    total: int
+    completed: int
+    page: int
+    page_size: int
+
+
+class ChecklistNameInput(Schema):
+    model_config = ConfigDict(extra="forbid")
+
+    name: Annotated[str, StringConstraints(
+        strip_whitespace=True, min_length=1, max_length=TASK_NAME_MAX_LENGTH, pattern=r"^[^\x00]+$",
+    )]
+
+    @field_validator("name")
+    @classmethod
+    def reject_null(cls, value):
+        if value is None:
+            raise ValueError("Поле не может быть пустым.")
+        return value
+
+
+class ChecklistItemChangeInput(ChecklistNameInput):
+    is_completed: Annotated[bool, Field(strict=True)] = False
+
+    @field_validator("is_completed")
+    @classmethod
+    def reject_null_completion(cls, value):
+        if value is None:
+            raise ValueError("Укажите состояние пункта.")
+        return value
+
+
+class ChecklistOrderInput(Schema):
+    model_config = ConfigDict(extra="forbid")
+
+    item_ids: list[InputId]
+
+
+class ConversionInput(Schema):
+    model_config = ConfigDict(extra="forbid")
+
+    confirm: Annotated[bool, Field(strict=True)]
+
+
+class InverseConversionInput(ConversionInput):
+    checklist_id: InputId
+
+
+class ChecklistItemOutput(Schema):
+    id: int
+    name: str
+    position: int
+    is_completed: bool
+    completed_at: datetime | None
+    completed_by: MemberOutput | None
+
+
+class ChecklistOutput(Schema):
+    id: int
+    name: str
+    completed: int
+    total: int
+    items: list[ChecklistItemOutput]
+
+
+class ChecklistConversionOutput(Schema):
+    id: int
+    direction: Literal["item_to_task", "task_to_item"]
+    item_id: int
+    item_name: str
+    task_id: int | None
+    task_name: str | None
+    actor: MemberOutput
+    created_at: datetime
+
+
+class DecompositionOutput(Schema):
+    can_manage: bool
+    can_create_subtask: bool
+    can_move: bool
+    can_convert_to_item: bool
+    convert_to_item_reason: str | None
+    checklists: list[ChecklistOutput]
+    conversions: list[ChecklistConversionOutput]
+
+
+class DependencyInput(Schema):
+    model_config = ConfigDict(extra="forbid")
+
+    predecessor_id: InputId
+    kind: TaskDependency.Kind
+
+
+class DependencyPredecessor(NamedObject):
+    status: Task.Status
+
+
+class DependencyOutput(Schema):
+    id: int
+    kind: TaskDependency.Kind
+    predecessor: DependencyPredecessor | None
+    unresolved: bool
+
+
+class DependencyListOutput(Schema):
+    can_manage: bool
+    blocked: bool
+    items: list[DependencyOutput]
 
 
 class DepartmentOption(NamedObject):

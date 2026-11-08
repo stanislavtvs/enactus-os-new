@@ -1,0 +1,99 @@
+<div id="task-decomposition" class="workspace-grid" hidden>
+    <p id="task-decomposition-notice" class="collection-feedback" role="status"></p>
+    <p id="task-decomposition-error" class="form-errors" role="alert"></p>
+    <section class="card card-padded" aria-labelledby="task-subtasks-heading">
+        <div class="task-section-header">
+            <div>
+                <h2 id="task-subtasks-heading" tabindex="-1">Подзадачи</h2>
+                <p id="task-subtask-progress" class="task-meta"></p>
+            </div>
+            <div class="task-actions">
+                <button id="task-move-parent" class="button collection-secondary" type="button" aria-haspopup="dialog" hidden>Изменить родительскую задачу</button>
+                <button id="task-add-subtask" class="button button-primary" type="button" aria-label="Добавить подзадачу" aria-haspopup="dialog" hidden>
+                    <svg class="collection-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+                    Подзадача
+                </button>
+            </div>
+        </div>
+        <p id="task-subtasks-empty" class="muted task-gap" hidden>Подзадач пока нет.</p>
+        <div id="task-subtasks-tree"></div>
+        <button id="task-subtasks-more" class="button collection-secondary task-gap" type="button" hidden>Показать ещё</button>
+    </section>
+
+    <section class="card card-padded" aria-labelledby="task-checklists-heading">
+        <div class="task-section-header">
+            <div>
+                <h2 id="task-checklists-heading" tabindex="-1">Чек-листы</h2>
+                <p id="task-checklist-progress" class="task-meta"></p>
+            </div>
+            <button id="task-add-checklist" class="button button-primary" type="button" aria-label="Добавить чек-лист" aria-haspopup="dialog" hidden>
+                <svg class="collection-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+                Чек-лист
+            </button>
+        </div>
+        <p id="task-checklists-empty" class="muted task-gap" hidden>Чек-листов пока нет.</p>
+        <ul id="task-checklists-list" class="task-checklists" role="list"></ul>
+        <button id="task-convert-to-item" class="button collection-secondary task-gap" type="button" aria-haspopup="dialog" hidden>Преобразовать в пункт чек-листа</button>
+        <p id="task-convert-to-item-reason" class="task-meta task-gap" hidden></p>
+        <details id="task-conversion-history-panel" class="task-workflow-history" hidden>
+            <summary>История преобразований</summary>
+            <ol id="task-conversion-history" class="task-workflow-list"></ol>
+        </details>
+    </section>
+</div>
+
+<dialog id="task-subtask-dialog" class="collection-dialog" aria-labelledby="task-subtask-dialog-heading">
+    <header class="collection-dialog-header">
+        <h2 id="task-subtask-dialog-heading">Новая подзадача</h2>
+        <button type="button" class="button collection-secondary" data-dialog-close aria-label="Закрыть форму">
+            <svg class="icon" aria-hidden="true"><use href="#icon-close"/></svg>
+        </button>
+    </header>
+    <form id="task-subtask-form" class="form-stack" method="post">
+        {% include "tasks/fields.html" with field_prefix="subtask" initial_focus=True %}
+        <div class="task-fields">
+            <div class="form-field">
+                <label for="task-child-project">Проект</label>
+                <select id="task-child-project" name="project_id"></select>
+            </div>
+            <div class="form-field">
+                <label for="task-child-department">Подразделение</label>
+                <select id="task-child-department" name="department_id"></select>
+            </div>
+        </div>
+        <p id="task-subtask-error" class="form-errors" role="alert"></p>
+        <div class="collection-dialog-actions">
+            <button class="button collection-secondary" type="button" data-dialog-close>Отмена</button>
+            <button class="button button-primary" type="submit">Создать подзадачу</button>
+        </div>
+    </form>
+</dialog>
+
+<dialog id="task-decomposition-dialog" class="collection-dialog" aria-labelledby="task-decomposition-dialog-heading">
+    <header class="collection-dialog-header">
+        <h2 id="task-decomposition-dialog-heading"></h2>
+        <button type="button" class="button collection-secondary" data-dialog-close aria-label="Закрыть форму">
+            <svg class="icon" aria-hidden="true"><use href="#icon-close"/></svg>
+        </button>
+    </header>
+    <form id="task-decomposition-form" class="form-stack" method="post">
+        <p id="task-decomposition-dialog-hint" class="muted" hidden></p>
+        <div id="task-decomposition-name-field" class="form-field" hidden>
+            <label for="task-decomposition-name">Название</label>
+            <input id="task-decomposition-name" name="name">
+        </div>
+        <div id="task-decomposition-search-field" class="form-field" hidden>
+            <label for="task-decomposition-search">Поиск задачи по названию</label>
+            <input id="task-decomposition-search" type="search" maxlength="200">
+        </div>
+        <div id="task-decomposition-target-field" class="form-field" hidden>
+            <label id="task-decomposition-target-label" for="task-decomposition-target"></label>
+            <select id="task-decomposition-target" name="target"></select>
+        </div>
+        <p id="task-decomposition-form-error" class="form-errors" role="alert"></p>
+        <div class="collection-dialog-actions">
+            <button class="button collection-secondary" type="button" data-dialog-close>Отмена</button>
+            <button class="button button-primary" id="task-decomposition-save" type="submit">Сохранить</button>
+        </div>
+    </form>
+</dialog>

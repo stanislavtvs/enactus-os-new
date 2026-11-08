@@ -1,5 +1,7 @@
 import {dateLabel, deadlineState, element, errorMessage, localValue, priorities, readTaskFields, request, selectOptions, statuses} from "./shared.js";
 import {taskWorkflow} from "./workflow.js";
+import {taskDecomposition} from "./decomposition.js";
+import {taskDependencies} from "./dependencies.js";
 
 const app = document.querySelector("#task-app");
 const base = app.dataset.orgUrl;
@@ -37,10 +39,30 @@ const workflow = taskWorkflow(app, {
         }
     },
 });
+const decomposition = taskDecomposition(app, {
+    api,
+    base,
+    token,
+    refresh: () => load(),
+});
+const dependencies = taskDependencies(app, {
+    api,
+    base,
+    token,
+    refresh: () => load(),
+});
 
 function renderInfo() {
     heading.textContent = task.name;
     document.title = `${task.name} — ${app.dataset.orgName} — Enactus OS`;
+    const parentContext = document.querySelector("#task-parent-context");
+    parentContext.hidden = !task.parent;
+    parentContext.replaceChildren();
+    if (task.parent) {
+        const parentLink = element("a", "", task.parent.name);
+        parentLink.href = `${app.dataset.taskListUrl}${task.parent.id}/`;
+        parentContext.append("Родительская задача: ", parentLink);
+    }
     const deadline = deadlineState(task);
     const due = dateLabel(task.due_at);
     const data = [
@@ -124,7 +146,7 @@ function setupEdit(options) {
 
 function setBusy(value) {
     busy = value;
-    for (const panel of [info, people, editPanel, workflow.panel]) {
+    for (const panel of [info, people, editPanel, workflow.panel, decomposition.panel, dependencies.panel]) {
         panel.inert = value;
     }
 }
@@ -140,10 +162,14 @@ async function load(message = "") {
         renderPeople();
         editPanel.hidden = true;
         workflow.panel.hidden = true;
-        const [workflowResult, optionsResult] = await Promise.allSettled([
+        decomposition.panel.hidden = true;
+        dependencies.panel.hidden = true;
+        const [workflowResult, optionsResult, decompositionResult, dependenciesResult] = await Promise.allSettled([
             request(`${api}workflow/`),
             task.permissions.update || task.permissions.assign
                 ? request(`${base}task-options/?task_id=${encodeURIComponent(app.dataset.taskId)}`) : null,
+            task.can_view_decomposition ? decomposition.load(task) : null,
+            task.can_view_decomposition ? dependencies.load(task) : null,
         ]);
         if (workflowResult.status === "fulfilled") {
             workflow.render(task, workflowResult.value);
@@ -157,7 +183,8 @@ async function load(message = "") {
                 renderPeople(true, options.assignees);
             }
         }
-        const failure = [workflowResult, optionsResult].find(({status}) => status === "rejected");
+        const failure = [workflowResult, optionsResult, decompositionResult, dependenciesResult]
+            .find(({status}) => status === "rejected");
         if (failure) {
             throw failure.reason;
         }

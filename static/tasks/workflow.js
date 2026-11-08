@@ -208,7 +208,8 @@ export function taskWorkflow(app, {api, token, refresh}) {
                 ? `Поручение поступит в очередь подразделения «${current.department.name}».` : "",
             allocate: current.project ? "В списке только доступные участники проектной команды." : "",
             submit: review.submissions.length ? "Новая версия пройдёт все обязательные этапы заново." : "",
-            approve: "Результат перейдёт на следующий этап или завершит задачу, если проверка последняя.",
+            approve: "Результат перейдёт на следующий этап или завершит задачу, если проверка последняя."
+                + (current.has_unfinished_children ? " У задачи ещё есть незавершённые подзадачи." : ""),
             return: "Исполнитель увидит ваш комментарий. Следующая версия начнёт проверку заново.",
         };
         find("#task-workflow-dialog-heading").textContent = titles[type];

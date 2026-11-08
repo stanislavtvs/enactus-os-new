@@ -17,11 +17,12 @@
     <header class="page-heading">
         <p class="eyebrow">{{ organization.name }} · Задачи</p>
         <h1 id="task-heading" tabindex="-1">Задача</h1>
+        <p id="task-parent-context" hidden></p>
     </header>
 
     <noscript><p>Включите JavaScript, чтобы загрузить задачу.</p></noscript>
     <div id="task-app" class="workspace-grid tasks-page" data-org-url="{{ api_org_url }}"
-         data-task-id="{{ task_id }}" data-org-name="{{ organization.name }}">
+         data-task-id="{{ task_id }}" data-org-name="{{ organization.name }}" data-task-list-url="{{ task_list_url }}">
         {% csrf_token %}
         <div class="task-notices">
             <p id="task-load-status" class="muted" role="status"></p>
@@ -46,6 +47,8 @@
         </section>
 
         {% include "tasks/workflow.html" %}
+        {% include "tasks/decomposition.html" %}
+        {% include "tasks/dependencies.html" %}
 
         <section class="card card-padded" id="task-people" aria-labelledby="task-people-heading" hidden>
             <h2 id="task-people-heading">Исполнители</h2>

@@ -37,6 +37,9 @@ class Task(models.Model):
     department = models.ForeignKey(
         Department, on_delete=models.PROTECT, null=True, blank=True, related_name="tasks",
     )
+    parent = models.ForeignKey(
+        "self", on_delete=models.PROTECT, null=True, blank=True, related_name="subtasks",
+    )
     planned_start_at = models.DateTimeField(null=True, blank=True)
     due_at = models.DateTimeField(null=True, blank=True)
     completed_at = models.DateTimeField(null=True, blank=True)
@@ -56,6 +59,7 @@ class Task(models.Model):
     class Meta:
         constraints = [
             models.UniqueConstraint(fields=["organization", "id"], name="unique_task_organization_id"),
+            models.CheckConstraint(condition=~Q(parent_id=F("id")), name="task_parent_is_not_self"),
             models.CheckConstraint(
                 condition=Q(planned_start_at__isnull=True) | Q(due_at__isnull=True)
                 | Q(due_at__gte=F("planned_start_at")),
@@ -176,3 +180,101 @@ class TaskReviewDecision(models.Model):
     outcome = models.CharField(max_length=8, choices=Outcome)
     comment = models.TextField(blank=True, default="")
     created_at = models.DateTimeField(auto_now_add=True)
+
+
+class Checklist(models.Model):
+    organization = models.ForeignKey(Organization, on_delete=models.CASCADE)
+    task = models.ForeignKey(Task, on_delete=models.CASCADE, related_name="checklists")
+    name = models.CharField(max_length=TASK_NAME_MAX_LENGTH)
+    created_at = models.DateTimeField(auto_now_add=True)
+    archived_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["organization", "task", "id"], name="unique_task_checklist_scope",
+            ),
+        ]
+
+
+class ChecklistItem(models.Model):
+    organization = models.ForeignKey(Organization, on_delete=models.CASCADE)
+    task = models.ForeignKey(Task, on_delete=models.CASCADE, related_name="checklist_items")
+    checklist = models.ForeignKey(Checklist, on_delete=models.CASCADE, related_name="items")
+    name = models.CharField(max_length=TASK_NAME_MAX_LENGTH)
+    position = models.PositiveIntegerField()
+    completed_at = models.DateTimeField(null=True, blank=True)
+    completed_by = models.ForeignKey(
+        OrganizationMembership, on_delete=models.PROTECT, null=True, blank=True,
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    archived_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["organization", "task", "id"], name="unique_task_checklist_item_scope",
+            ),
+            models.UniqueConstraint(
+                fields=["checklist", "position"], condition=Q(archived_at__isnull=True),
+                name="unique_active_checklist_item_position",
+            ),
+            models.CheckConstraint(condition=Q(position__gt=0), name="checklist_item_position_positive"),
+            models.CheckConstraint(
+                condition=Q(completed_at__isnull=True, completed_by__isnull=True)
+                | Q(completed_at__isnull=False, completed_by__isnull=False),
+                name="checklist_item_completion_pair",
+            ),
+        ]
+
+    @property
+    def is_completed(self):
+        return self.completed_at is not None
+
+
+class ChecklistConversion(models.Model):
+    class Direction(models.TextChoices):
+        ITEM_TO_TASK = "item_to_task", "Пункт в подзадачу"
+        TASK_TO_ITEM = "task_to_item", "Подзадача в пункт"
+
+    organization = models.ForeignKey(Organization, on_delete=models.CASCADE)
+    parent_task = models.ForeignKey(Task, on_delete=models.PROTECT, related_name="child_conversions")
+    task = models.ForeignKey(Task, on_delete=models.PROTECT, related_name="checklist_conversions")
+    item = models.ForeignKey(ChecklistItem, on_delete=models.PROTECT, related_name="conversions")
+    actor = models.ForeignKey(OrganizationMembership, on_delete=models.PROTECT)
+    direction = models.CharField(max_length=12, choices=Direction)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["item"], condition=Q(direction="item_to_task"),
+                name="unique_checklist_item_forward_conversion",
+            ),
+            models.UniqueConstraint(
+                fields=["task"], condition=Q(direction="task_to_item"),
+                name="unique_task_inverse_conversion",
+            ),
+        ]
+
+
+class TaskDependency(models.Model):
+    class Kind(models.TextChoices):
+        INFORMATIONAL = "informational", "Предупреждение"
+        STRICT = "strict", "Блокирует выполнение"
+
+    organization = models.ForeignKey(Organization, on_delete=models.CASCADE)
+    task = models.ForeignKey(Task, on_delete=models.CASCADE, related_name="dependencies")
+    predecessor = models.ForeignKey(Task, on_delete=models.PROTECT, related_name="dependents")
+    kind = models.CharField(max_length=13, choices=Kind)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["task", "predecessor"], name="unique_task_dependency_pair",
+            ),
+            models.CheckConstraint(
+                condition=~Q(task_id=F("predecessor_id")), name="task_dependency_is_not_self",
+            ),
+        ]

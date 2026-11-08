@@ -12,7 +12,7 @@ from apps.projects.services import _can_view as can_view_project
 from apps.projects.services import _context as project_context
 from apps.projects.services import visible_projects
 
-from .models import Task, TaskCollaborator, TaskDistribution
+from .models import Task, TaskCollaborator, TaskDependency, TaskDistribution
 
 VIEW = "tasks.view"
 CREATE = "tasks.create"
@@ -28,6 +28,7 @@ TRANSITIONS = {
 }
 REQUIRES_ASSIGNEE = {Task.Status.IN_PROGRESS, Task.Status.REVIEW, Task.Status.COMPLETED}
 TERMINAL_STATUSES = {Task.Status.COMPLETED, Task.Status.CANCELLED}
+INHERIT_SCOPE = object()
 
 
 class TaskConflict(Exception):
@@ -73,6 +74,9 @@ def _task_visible(access, task):
 
 def _task_rows(access, *, lock=False):
     organization = access.organization
+    unresolved_dependencies = TaskDependency.objects.filter(
+        organization=organization, task_id=OuterRef("pk"),
+    ).exclude(predecessor__status=Task.Status.COMPLETED)
     rows = organization.tasks.select_related(
         "created_by__user", "assignee__user", "department", "project__responsible_department",
         "reviewer__user", "organization",
@@ -91,6 +95,15 @@ def _task_rows(access, *, lock=False):
         )),
         _distribution_pending=Exists(TaskDistribution.objects.filter(
             organization=organization, task_id=OuterRef("pk"), status=TaskDistribution.Status.PENDING,
+        )),
+        has_unfinished_children=Exists(Task.objects.filter(
+            organization=organization, parent_id=OuterRef("pk"), is_archived=False,
+        ).exclude(status__in=TERMINAL_STATUSES)),
+        _strict_dependencies_unresolved=Exists(unresolved_dependencies.filter(
+            kind=TaskDependency.Kind.STRICT,
+        )),
+        _informational_dependencies_unresolved=Exists(unresolved_dependencies.filter(
+            kind=TaskDependency.Kind.INFORMATIONAL,
         )),
     )
     if lock:
@@ -118,6 +131,13 @@ def _visible_rows(access):
     projects = visible_projects(access=access)
     rows = _task_rows(access).filter(Q(project__isnull=True) | Q(project_id__in=[p.pk for p in projects]))
     return _task_access_filter(access, rows)
+
+
+def visible_parent_names(access, tasks):
+    parent_ids = {task.parent_id for task in tasks if task.parent_id is not None}
+    if not parent_ids:
+        return {}
+    return dict(_visible_rows(access).filter(pk__in=parent_ids).values_list("id", "name"))
 
 
 def _task_access_filter(access, rows):
@@ -246,6 +266,19 @@ def _assignee_is_active(task):
     )
 
 
+def has_blocking_dependencies(task):
+    return task.status == Task.Status.PENDING and task._strict_dependencies_unresolved
+
+
+def has_dependency_warnings(task):
+    return task._informational_dependencies_unresolved
+
+
+def require_no_blocking_dependencies(task):
+    if has_blocking_dependencies(task):
+        raise TaskConflict("Сначала завершите блокирующие предшествующие задачи.")
+
+
 def allowed_statuses(*, access, task):
     if (
         not _task_is_writable(task) or not _task_visible(access, task)
@@ -253,6 +286,8 @@ def allowed_statuses(*, access, task):
     ):
         return []
     choices = TRANSITIONS.get(task.status, ())
+    if has_blocking_dependencies(task):
+        choices = tuple(status for status in choices if status != Task.Status.IN_PROGRESS)
     if not choices or _assignee_is_active(task):
         return list(choices)
     return [status for status in choices if status not in REQUIRES_ASSIGNEE]
@@ -327,9 +362,17 @@ def _managed_task(user, org_id, task_id, action, *, allow_archived=False):
 @transaction.atomic
 def create_task(
     *, user, org_id, name, description="", priority=Task.Priority.NORMAL,
-    project_id=None, department_id=None, planned_start_at=None, due_at=None,
+    project_id=INHERIT_SCOPE, department_id=INHERIT_SCOPE, parent_id=None,
+    planned_start_at=None, due_at=None,
 ):
     access = organization_access(user=user, org_id=org_id, lock=True)
+    parent = _parent_for_change(access, parent_id, require_writable=True)
+    if project_id is INHERIT_SCOPE:
+        project_id = parent.project_id if parent else None
+    if department_id is INHERIT_SCOPE:
+        department_id = (
+            parent.department_id if parent and parent.department_id and not parent.department.is_archived else None
+        )
     project = None
     if project_id is not None:
         project = get_object_or_404(
@@ -345,9 +388,44 @@ def create_task(
     _validate_dates(planned_start_at, due_at)
     return access.organization.tasks.create(
         name=name, description=description, priority=priority, project=project,
-        department=department, created_by=access.membership,
+        department=department, parent=parent, created_by=access.membership,
         planned_start_at=planned_start_at, due_at=due_at,
     )
+
+
+def _parent_for_change(access, parent_id, *, require_writable):
+    if parent_id is None:
+        return None
+    parent = get_object_or_404(_task_rows(access, lock=True), pk=parent_id)
+    if not _task_visible(access, parent):
+        raise Http404
+    if not access.allows(UPDATE, _context(parent.project, parent.department)):
+        raise PermissionDenied
+    if require_writable and not _task_is_writable(parent):
+        raise TaskConflict("Архивная задача не может стать родительской.")
+    return parent
+
+
+@transaction.atomic
+def set_task_parent(*, user, org_id, task_id, parent_id):
+    access, task = _managed_task(user, org_id, task_id, UPDATE)
+    if parent_id == task.pk:
+        raise TaskConflict("Задача не может быть своим родителем.")
+    _parent_for_change(access, task.parent_id, require_writable=False)
+    parent = _parent_for_change(access, parent_id, require_writable=True)
+    if parent is not None:
+        parents = dict(access.organization.tasks.values_list("id", "parent_id"))
+        visited = {task.pk}
+        current = parent.pk
+        while current is not None:
+            if current in visited:
+                raise TaskConflict("Такой перенос создаёт цикл подзадач.")
+            visited.add(current)
+            current = parents[current]
+    if task.parent_id != parent_id:
+        task.parent = parent
+        task.save(update_fields=["parent", "updated_at"])
+    return task
 
 
 @transaction.atomic
@@ -464,6 +542,8 @@ def set_status(*, user, org_id, task_id, status):
         return task
     if status not in TRANSITIONS.get(task.status, ()):
         raise TaskConflict("Такой переход статуса недоступен.")
+    if status == Task.Status.IN_PROGRESS:
+        require_no_blocking_dependencies(task)
     if status in REQUIRES_ASSIGNEE and not _assignee_is_active(task):
         raise TaskConflict("Сначала назначьте основного исполнителя.")
     task.status = status
