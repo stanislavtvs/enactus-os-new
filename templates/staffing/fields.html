@@ -1,0 +1,22 @@
+<div class="staffing-fields">
+    <div class="form-field">
+        <label for="staffing-count">Сколько специалистов нужно</label>
+        <input id="staffing-count" name="requested_count" type="number" min="1" max="2147483647" required>
+    </div>
+    <div class="form-field">
+        <label for="staffing-specialization">Специализация</label>
+        <input id="staffing-specialization" name="specialization" maxlength="200">
+    </div>
+    <div class="form-field">
+        <label for="staffing-start">Желаемая дата начала</label>
+        <input id="staffing-start" name="desired_start" type="date">
+    </div>
+    <div class="form-field">
+        <label for="staffing-duration">Длительность в днях</label>
+        <input id="staffing-duration" name="duration_days" type="number" min="1" max="2147483647">
+    </div>
+</div>
+<div class="form-field">
+    <label for="staffing-description">Что предстоит делать</label>
+    <textarea id="staffing-description" name="description" rows="4" required></textarea>
+</div>

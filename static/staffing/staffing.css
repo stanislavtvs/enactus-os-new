@@ -1,0 +1,59 @@
+.staffing-page select, .staffing-page textarea {
+    width: 100%;
+    min-height: 2.75rem;
+    padding: 0.55rem 0.7rem;
+    border: 1px solid var(--input-line);
+    border-radius: 0.55rem;
+    background: var(--surface);
+    color: var(--ink);
+    font: inherit;
+}
+.staffing-page textarea { resize: vertical; }
+.staffing-fields {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(14rem, 100%), 1fr));
+    gap: var(--space-md);
+}
+.staffing-facts { margin-block: var(--space-md); }
+.staffing-facts dt { font-size: 0.87rem; color: var(--muted); }
+.staffing-facts dd { margin: var(--space-xs) 0 0; font-weight: 650; overflow-wrap: anywhere; }
+.staffing-description { white-space: pre-wrap; overflow-wrap: anywhere; }
+.staffing-message:not(:empty) { margin-top: var(--space-sm); }
+.staffing-notices:not(:has(button:not([hidden]))):not(:has(p:not(:empty))) { margin-bottom: calc(-1 * var(--space-md)); }
+.staffing-notices button:not([hidden]), .staffing-page section > .staffing-secondary:not([hidden]) { margin-top: var(--space-xs); }
+.staffing-list { margin: var(--space-sm) 0 0; padding: 0; list-style: none; }
+.staffing-list:empty { margin: 0; }
+.staffing-row, .staffing-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: start;
+    gap: var(--space-xs) var(--space-sm);
+}
+.staffing-row {
+    justify-content: space-between;
+    padding: var(--space-sm) 0;
+    border-top: 1px solid var(--line);
+    overflow-wrap: anywhere;
+}
+.staffing-row > div { min-width: 0; }
+.staffing-title { font-weight: 650; }
+.staffing-meta { font-size: 0.88rem; color: var(--muted); }
+.staffing-secondary { border-color: var(--line); background: var(--surface); color: var(--ink); }
+.staffing-secondary:hover { background: var(--subtle); }
+.staffing-candidates {
+    min-width: 0;
+    margin: 0;
+    padding: var(--space-xs) var(--space-sm);
+    border: 1px solid var(--line);
+    border-radius: 0.55rem;
+}
+.staffing-candidate {
+    display: flex;
+    align-items: start;
+    gap: var(--space-xs);
+    padding: var(--space-xs) 0;
+    overflow-wrap: anywhere;
+}
+.staffing-candidate input { flex: none; }
+.staffing-candidate span { min-width: 0; }
+.staffing-candidate .staffing-meta { display: block; }

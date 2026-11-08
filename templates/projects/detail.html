@@ -16,6 +16,9 @@
     <header class="page-heading">
         <p class="eyebrow">{{ organization.name }} · Проекты</p>
         <h1 id="project-heading" tabindex="-1">Проект</h1>
+        {% if can_open_team %}
+            <p><a href="{% url 'project-team' org_id=organization.id project_id=project_id %}">Команда</a></p>
+        {% endif %}
     </header>
 
     <noscript><p>Включите JavaScript, чтобы загрузить проект.</p></noscript>

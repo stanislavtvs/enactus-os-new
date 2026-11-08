@@ -6,6 +6,7 @@ from django.views.decorators.http import require_GET
 
 from apps.access.services import organization_access
 
+from .staffing import can_request_staffing, can_view_team
 from .services import can_open_projects, visible_project
 
 
@@ -34,4 +35,5 @@ def organization_project(request, org_id, project_id):
     project = visible_project(access=access, project_id=project_id)
     return render(request, "projects/detail.html", {
         **_project_context(access), "project_id": project.pk,
+        "can_open_team": can_view_team(access, project) or can_request_staffing(access, project),
     })

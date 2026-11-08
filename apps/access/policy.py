@@ -21,6 +21,10 @@ class Permission(models.TextChoices):
     PROJECTS_ARCHIVE = "projects.archive", "Архивировать проекты"
     PROJECTS_MANAGE_DEPARTMENTS = "projects.manage_departments", "Настраивать подразделения проекта"
     PROJECTS_MANAGE_LEAD = "projects.manage_lead", "Назначать руководителя проекта"
+    PROJECTS_TEAM_VIEW = "projects.team.view", "Просматривать команду проекта"
+    PROJECTS_TEAM_MANAGE = "projects.team.manage", "Управлять членством в проекте"
+    PROJECTS_STAFFING_REQUEST = "projects.staffing.request", "Запрашивать специалистов для своего проекта"
+    DEPARTMENTS_STAFFING_ALLOCATE = "departments.staffing.allocate", "Распределять специалистов подразделения"
     ROLES_READ = "roles.read", "Просматривать роли"
     ROLES_MANAGE = "roles.manage", "Управлять ролями"
 

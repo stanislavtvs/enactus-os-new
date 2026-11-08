@@ -18,6 +18,12 @@ from apps.organizations.workspace_views import (
     user_profile,
 )
 
+from apps.projects.staffing_views import (
+    organization_staffing_page,
+    project_invitation_page,
+    project_team_page,
+    staffing_request_page,
+)
 from apps.projects.views import organization_project, organization_projects
 
 from .api import api
@@ -60,6 +66,16 @@ urlpatterns = [
         organization_project,
         name="organization-project",
     ),
+    path(
+        "organizations/<int:org_id>/projects/<int:project_id>/team/",
+        project_team_page, name="project-team",
+    ),
+    path("organizations/<int:org_id>/staffing/", organization_staffing_page, name="organization-staffing"),
+    path(
+        "organizations/<int:org_id>/staffing/<int:request_id>/",
+        staffing_request_page, name="organization-staffing-request",
+    ),
+    path("organizations/project-invitations/", project_invitation_page, name="project-invitations"),
     path("admin/", admin.site.urls),
     path("accounts/login/", LoginView.as_view(), name="login"),
     path("accounts/logout/", LogoutView.as_view(), name="logout"),

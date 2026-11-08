@@ -10,7 +10,7 @@
     <header class="page-heading">
         <p class="eyebrow">{{ organization.name }}</p>
         <h1>Настройки организации</h1>
-        <p>Выберите, как новые участники могут вступить в организацию.</p>
+        <p>Настройте вступление в организацию и включение в проектные команды.</p>
     </header>
     <section class="card card-padded onboarding" aria-labelledby="organization-policy-heading">
         <h2 id="organization-policy-heading">Правила вступления</h2>
@@ -24,6 +24,20 @@
                 {% if policy_form.policy.errors %}<div class="form-errors" role="alert">{{ policy_form.policy.errors }}</div>{% endif %}
             </div>
             <button class="button button-primary" type="submit">Сохранить правила</button>
+        </form>
+    </section>
+    <section class="card card-padded onboarding" aria-labelledby="project-assignment-heading">
+        <h2 id="project-assignment-heading">Включение в проект</h2>
+        <form class="form-stack" id="project-assignment-mode-form" method="post">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="assignment_mode">
+            {% if assignment_form.non_field_errors %}<div class="form-errors" role="alert">{{ assignment_form.non_field_errors }}</div>{% endif %}
+            <div class="form-field settings-field">
+                {{ assignment_form.mode.label_tag }}
+                {{ assignment_form.mode }}
+                {% if assignment_form.mode.errors %}<div class="form-errors" role="alert">{{ assignment_form.mode.errors }}</div>{% endif %}
+            </div>
+            <button class="button button-primary" type="submit">Сохранить способ включения</button>
         </form>
     </section>
 {% endblock %}

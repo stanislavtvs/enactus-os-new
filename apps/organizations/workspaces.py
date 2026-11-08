@@ -2,6 +2,7 @@ from django.urls import reverse
 
 from apps.access.policy import Access, Permission
 from apps.projects.services import can_open_projects
+from apps.projects.staffing import can_open_staffing
 
 from .models import Organization
 from .services import visible_organizations
@@ -16,6 +17,9 @@ SCOPED_ROUTES = {
     "organization-projects",
     "organization-project",
     "organization-access",
+    "project-team",
+    "organization-staffing",
+    "organization-staffing-request",
     "organization-manage",
     "organization-settings",
 }
@@ -29,6 +33,10 @@ PAGE_TITLES = {
     "organization-members": "Участники",
     "organization-projects": "Проекты",
     "organization-project": "Проект",
+    "project-team": "Команда проекта",
+    "organization-staffing": "Запросы сотрудников",
+    "organization-staffing-request": "Запрос специалистов",
+    "project-invitations": "Приглашения в проекты",
     "organization-access": "Роли и доступ",
     "organization-manage": "Управление вступлением",
     "organization-settings": "Настройки организации",
@@ -81,7 +89,11 @@ def _workspace_links(request, workspace, route):
         ("organization-detail", "Обзор", "home", True, ()),
         ("organization-departments", "Подразделения", "org", True, ("department-members",)),
         ("organization-members", "Участники", "user", can_view_organization_members(access), ()),
-        ("organization-projects", "Проекты", "arrow", can_open_projects(access), ("organization-project",)),
+        ("organization-projects", "Проекты", "arrow", can_open_projects(access), ("organization-project", "project-team")),
+        (
+            "organization-staffing", "Запросы сотрудников", "invite",
+            can_open_staffing(access), ("organization-staffing-request",),
+        ),
         ("organization-access", "Роли и доступ", "org", True, ()),
         (
             "organization-manage", "Приглашения и заявки", "invite",

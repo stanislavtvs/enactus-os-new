@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Запросы специалистов — {{ organization.name }} — Enactus OS{% endblock %}
+{% block extra_head %}
+    <link rel="stylesheet" href="{% static 'staffing/staffing.css' %}">
+    <script type="module" src="{% static 'staffing/queue.js' %}"></script>
+{% endblock %}
+
+{% block content %}
+    <header class="page-heading">
+        <p class="eyebrow">{{ organization.name }}</p>
+        <h1>Запросы специалистов</h1>
+        <p>Здесь собраны запросы, к которым у вас есть доступ.</p>
+    </header>
+    <noscript><p>Включите JavaScript, чтобы загрузить запросы.</p></noscript>
+    <div id="staffing-queue-app" class="staffing-page" data-org-url="{{ api_org_url }}"
+         data-queue-url="{% url 'organization-staffing' org_id=organization.id %}">
+        <section class="card card-padded" aria-labelledby="staffing-queue-heading">
+            <h2 id="staffing-queue-heading">Очередь запросов</h2>
+            <div class="staffing-fields staffing-message" id="staffing-queue-filters" hidden>
+                <div class="form-field">
+                    <label for="staffing-search">Поиск по проекту, отделу или специализации</label>
+                    <input id="staffing-search" type="search">
+                </div>
+                <div class="form-field">
+                    <label for="staffing-status-filter">Статус</label>
+                    <select id="staffing-status-filter"><option value="">Все статусы</option></select>
+                </div>
+            </div>
+            <p class="muted staffing-message" id="staffing-status" role="status"></p>
+            <p class="form-errors staffing-message" id="staffing-error" role="alert"></p>
+            <button class="button staffing-secondary" id="staffing-retry" type="button" hidden>Обновить очередь</button>
+            <ul class="staffing-list" id="staffing-queue-list" role="list"></ul>
+        </section>
+    </div>
+{% endblock %}

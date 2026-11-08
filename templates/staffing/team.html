@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Команда — {{ project.name }} — Enactus OS{% endblock %}
+{% block extra_head %}
+    <link rel="stylesheet" href="{% static 'staffing/staffing.css' %}">
+    <script type="module" src="{% static 'staffing/team.js' %}"></script>
+{% endblock %}
+
+{% block content %}
+    <nav class="breadcrumbs" aria-label="Путь к странице">
+        <a href="{% url 'organization-project' org_id=organization.id project_id=project.id %}">{{ project.name }}</a>
+    </nav>
+    <header class="page-heading">
+        <p class="eyebrow">{{ organization.name }} · {{ project.name }}</p>
+        <h1>Команда проекта</h1>
+        <p>Состав команды и запросы специалистов в подразделения.</p>
+    </header>
+    <noscript><p>Включите JavaScript, чтобы загрузить команду проекта.</p></noscript>
+    <div class="workspace-grid staffing-page" id="project-team-app" data-org-url="{{ api_org_url }}"
+         data-project-url="{{ api_project_url }}" data-queue-url="{% url 'organization-staffing' org_id=organization.id %}">
+        {% csrf_token %}
+        <div class="staffing-notices">
+            <p class="muted" id="staffing-status" role="status"></p>
+            <p class="form-errors" id="staffing-error" role="alert"></p>
+            <button class="button staffing-secondary" id="staffing-retry" type="button" hidden>Обновить команду</button>
+        </div>
+        <section class="card card-padded" id="project-team-panel" aria-labelledby="team-members-heading" hidden>
+            <h2 id="team-members-heading" tabindex="-1">Состав команды</h2>
+            <p class="staffing-message" id="project-team-lead"></p>
+            <p class="muted staffing-message" id="project-team-empty" hidden>В команде нет действующих назначений.</p>
+            <ul id="project-team-members" class="staffing-list" role="list"></ul>
+        </section>
+        <section class="card card-padded" id="project-staffing-panel" aria-labelledby="project-staffing-heading" hidden>
+            <h2 id="project-staffing-heading">Запросы специалистов</h2>
+            <p class="muted staffing-message" id="project-staffing-empty" hidden>Запросов пока нет.</p>
+            <ul id="project-staffing-list" class="staffing-list" role="list"></ul>
+        </section>
+        <section class="card card-padded" id="project-staffing-create-panel" aria-labelledby="project-staffing-create-heading" hidden>
+            <h2 id="project-staffing-create-heading">Новый запрос специалистов</h2>
+            <p class="muted staffing-message">Сначала сохраните черновик. Отправить его подразделению можно со страницы запроса.</p>
+            <form method="post" class="form-stack" id="project-staffing-create-form">
+                <div class="form-field">
+                    <label for="staffing-department">Подразделение</label>
+                    <select id="staffing-department" name="department_id" required></select>
+                </div>
+                {% include "staffing/fields.html" %}
+                <button class="button button-primary" type="submit">Сохранить черновик</button>
+            </form>
+        </section>
+    </div>
+{% endblock %}

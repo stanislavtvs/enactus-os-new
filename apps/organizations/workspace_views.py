@@ -7,7 +7,9 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_GET, require_POST, require_http_methods
 
 from apps.access.policy import Access
+from apps.projects.staffing import StaffingConflict, set_assignment_mode
 
+from .models import Organization
 from .onboarding import OnboardingError, set_join_policy
 from .onboarding_forms import MAX_ID, PolicyForm
 from .services import visible_organizations
@@ -16,6 +18,12 @@ from .workspaces import ACTIVE_WORKSPACE_KEY, can_view_organization_members
 
 class WorkspaceSwitchForm(forms.Form):
     organization_id = forms.IntegerField(min_value=1, max_value=MAX_ID)
+
+
+class ProjectAssignmentModeForm(forms.Form):
+    mode = forms.ChoiceField(
+        label="Способ включения в проект", choices=Organization.ProjectAssignmentMode.choices,
+    )
 
 
 @login_required
@@ -51,7 +59,20 @@ def organization_settings(request, org_id):
         raise PermissionDenied
 
     status = 200
-    if request.method == "POST":
+    assignment_form = ProjectAssignmentModeForm(initial={"mode": organization.project_assignment_mode})
+    form = PolicyForm(initial={"policy": organization.join_policy})
+    if request.method == "POST" and request.POST.get("action") == "assignment_mode":
+        assignment_form = ProjectAssignmentModeForm(request.POST)
+        status = 400
+        if assignment_form.is_valid():
+            try:
+                set_assignment_mode(user=request.user, org_id=org_id, mode=assignment_form.cleaned_data["mode"])
+            except StaffingConflict as exc:
+                assignment_form.add_error(None, str(exc))
+                status = 409
+            else:
+                return redirect("organization-settings", org_id=org_id)
+    elif request.method == "POST":
         form = PolicyForm(request.POST)
         status = 400
         if form.is_valid():
@@ -62,12 +83,10 @@ def organization_settings(request, org_id):
                 status = 409
             else:
                 return redirect("organization-settings", org_id=org_id)
-    else:
-        form = PolicyForm(initial={"policy": organization.join_policy})
-
     return render(request, "organizations/settings.html", {
         "organization": organization,
         "policy_form": form,
+        "assignment_form": assignment_form,
     }, status=status)
 
 

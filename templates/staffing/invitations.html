@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Приглашения в проекты — Enactus OS{% endblock %}
+{% block extra_head %}
+    <link rel="stylesheet" href="{% static 'staffing/staffing.css' %}">
+    <script type="module" src="{% static 'staffing/invitations.js' %}"></script>
+{% endblock %}
+
+{% block content %}
+    <header class="page-heading">
+        <p class="eyebrow">Входящие</p>
+        <h1>Приглашения в проекты</h1>
+        <p>Подтвердите участие в проекте или отклоните приглашение.</p>
+    </header>
+    <noscript><p>Включите JavaScript, чтобы загрузить приглашения.</p></noscript>
+    <div class="staffing-page" id="project-invitations-app" data-api-url="{{ project_invitation_api_url }}">
+        {% csrf_token %}
+        <section class="card card-padded" aria-labelledby="project-invitations-heading">
+            <h2 id="project-invitations-heading" tabindex="-1">Мои приглашения</h2>
+            <p class="muted staffing-message" id="staffing-status" role="status"></p>
+            <p class="form-errors staffing-message" id="staffing-error" role="alert"></p>
+            <button class="button staffing-secondary" id="staffing-retry" type="button" hidden>Обновить приглашения</button>
+            <ul class="staffing-list" id="project-invitations-list" role="list"></ul>
+        </section>
+    </div>
+{% endblock %}

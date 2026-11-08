@@ -1,13 +1,13 @@
 from django.core.exceptions import PermissionDenied
 from django.db import transaction
-from django.db.models import Prefetch
+from django.db.models import Exists, OuterRef, Prefetch
 from django.http import Http404
 from django.shortcuts import get_object_or_404
 
 from apps.access.policy import Permission
 from apps.access.services import organization_access
 
-from .models import Project, ProjectDepartmentLink
+from .models import Project, ProjectDepartmentLink, ProjectMembership
 
 
 class ProjectConflict(Exception):
@@ -26,7 +26,18 @@ def _context(project):
 
 
 def _can_view(access, project):
-    return access.allows(Permission.PROJECTS_VIEW, _context(project))
+    if project.organization_id != access.organization.pk:
+        return False
+    if access.allows(Permission.PROJECTS_VIEW, _context(project)):
+        return True
+    if access.membership is None:
+        return False
+    if hasattr(project, "_active_team_member"):
+        return project._active_team_member
+    return project.memberships.filter(
+        organization=access.organization, organization_membership=access.membership,
+        is_active=True,
+    ).exists()
 
 
 def _require(access, action, department):
@@ -39,8 +50,14 @@ def _require_view(access, project):
         raise Http404
 
 
-def _projects(organization):
-    return organization.projects.select_related(
+def _projects(access):
+    organization = access.organization
+    return organization.projects.annotate(_active_team_member=Exists(
+        ProjectMembership.objects.filter(
+            project_id=OuterRef("pk"), organization=organization,
+            organization_membership=access.membership, is_active=True,
+        ),
+    )).select_related(
         "responsible_department", "lead_membership__user",
     ).prefetch_related(Prefetch(
         "department_links",
@@ -50,11 +67,11 @@ def _projects(organization):
 
 
 def visible_projects(*, access):
-    return [project for project in _projects(access.organization).order_by("id") if _can_view(access, project)]
+    return [project for project in _projects(access).order_by("id") if _can_view(access, project)]
 
 
 def visible_project(*, access, project_id):
-    project = get_object_or_404(_projects(access.organization), pk=project_id)
+    project = get_object_or_404(_projects(access), pk=project_id)
     _require_view(access, project)
     return project
 
@@ -69,6 +86,10 @@ def _can_create(access, department):
 
 def can_open_projects(access):
     if access.allows(Permission.PROJECTS_VIEW):
+        return True
+    if access.membership is not None and access.membership.project_memberships.filter(
+        organization=access.organization, is_active=True,
+    ).exists():
         return True
     return any(
         access.allows(Permission.PROJECTS_VIEW, department)

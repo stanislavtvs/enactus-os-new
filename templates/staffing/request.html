@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Запрос специалистов — {{ organization.name }} — Enactus OS{% endblock %}
+{% block extra_head %}
+    <link rel="stylesheet" href="{% static 'staffing/staffing.css' %}">
+    <script type="module" src="{% static 'staffing/request.js' %}"></script>
+{% endblock %}
+
+{% block content %}
+    <nav class="breadcrumbs" aria-label="Путь к странице">
+        <a href="{% url 'organization-detail' org_id=organization.id %}">{{ organization.name }}</a>
+    </nav>
+    <header class="page-heading">
+        <p class="eyebrow">{{ organization.name }}</p>
+        <h1 id="staffing-request-heading" tabindex="-1">Запрос специалистов</h1>
+    </header>
+    <noscript><p>Включите JavaScript, чтобы загрузить запрос.</p></noscript>
+    <div id="staffing-request-app" class="workspace-grid staffing-page" data-org-url="{{ api_org_url }}"
+         data-request-id="{{ staffing_request.id }}">
+        {% csrf_token %}
+        <div class="staffing-notices">
+            <p class="muted" id="staffing-status" role="status"></p>
+            <p class="form-errors" id="staffing-error" role="alert"></p>
+            <button class="button staffing-secondary" id="staffing-retry" type="button" hidden>Обновить запрос</button>
+        </div>
+        <section class="card card-padded" id="staffing-request-info" aria-labelledby="staffing-request-info-heading" hidden>
+            <h2 id="staffing-request-info-heading">Сведения о запросе</h2>
+            <dl id="staffing-request-facts" class="staffing-fields staffing-facts"></dl>
+            <p class="staffing-description" id="staffing-request-description"></p>
+            <div class="staffing-actions staffing-message">
+                <button class="button button-primary" id="staffing-submit" type="button" hidden>Отправить запрос</button>
+                <button class="button staffing-secondary" id="staffing-cancel" type="button" hidden>Отменить запрос</button>
+            </div>
+        </section>
+        <section class="card card-padded" id="staffing-edit-panel" aria-labelledby="staffing-edit-heading" hidden>
+            <h2 id="staffing-edit-heading">Редактировать запрос</h2>
+            <form method="post" class="form-stack" id="staffing-edit-form">
+                {% include "staffing/fields.html" %}
+                <button class="button button-primary" type="submit">Сохранить изменения</button>
+            </form>
+        </section>
+        <section class="card card-padded" id="staffing-allocation-panel" aria-labelledby="staffing-allocation-heading" hidden>
+            <h2 id="staffing-allocation-heading">Подбор специалистов</h2>
+            <p class="muted staffing-message" id="staffing-allocation-hint"></p>
+            <form method="post" class="form-stack" id="staffing-allocate-form">
+                <fieldset class="staffing-candidates">
+                    <legend>Кандидаты из целевой ветки</legend>
+                    <div id="staffing-candidates"></div>
+                </fieldset>
+                <button class="button button-primary" id="staffing-allocate" type="submit">Выделить специалистов</button>
+            </form>
+            <form method="post" class="form-stack" id="staffing-reject-form">
+                <div class="form-field">
+                    <label for="staffing-reject-comment">Комментарий к отказу</label>
+                    <textarea id="staffing-reject-comment" name="comment" rows="2" required></textarea>
+                </div>
+                <button class="button staffing-secondary" type="submit">Отклонить запрос</button>
+            </form>
+        </section>
+        <section class="card card-padded" id="staffing-history-panel" aria-labelledby="staffing-history-heading" hidden>
+            <h2 id="staffing-history-heading">История выделения</h2>
+            <p class="muted staffing-message" id="staffing-history-empty" hidden>Специалистов пока не выделяли.</p>
+            <ul class="staffing-list" id="staffing-history" role="list"></ul>
+        </section>
+    </div>
+{% endblock %}
