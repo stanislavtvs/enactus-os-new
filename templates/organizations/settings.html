@@ -11,6 +11,7 @@
         <p class="eyebrow">{{ organization.name }}</p>
         <h1>Настройки организации</h1>
         <p>Настройте вступление в организацию, включение в проектные команды и назначение задач.</p>
+        <a class="button" href="{% url 'organization-notification-policy' org_id=organization.id %}">Уведомления</a>
     </header>
     <section class="card card-padded onboarding" aria-labelledby="organization-policy-heading">
         <h2 id="organization-policy-heading">Правила вступления</h2>

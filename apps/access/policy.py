@@ -2,10 +2,11 @@ from collections import defaultdict
 from functools import cached_property
 
 from django.db import models
-from django.db.models import Q
+from django.db.models import F, Q
 
 
 class Permission(models.TextChoices):
+    NOTIFICATIONS_MANAGE = "notifications.manage", "Настраивать уведомления организации"
     DEPARTMENTS_READ = "departments.read", "Просматривать подразделения"
     DEPARTMENTS_CREATE = "departments.create", "Создавать подразделения"
     DEPARTMENTS_UPDATE = "departments.update", "Редактировать подразделения"
@@ -56,6 +57,7 @@ class Permission(models.TextChoices):
 
 
 ORGANIZATION_ONLY = frozenset({
+    Permission.NOTIFICATIONS_MANAGE,
     Permission.ORGANIZATIONS_ONBOARDING_MANAGE, Permission.ROLES_READ, Permission.ROLES_MANAGE,
     Permission.TASKS_WORKFLOW_VIEW, Permission.TASKS_PRIORITIES_MANAGE,
     Permission.TASKS_STATUSES_MANAGE, Permission.TASKS_TRANSITIONS_MANAGE,
@@ -70,6 +72,33 @@ LEGACY_MEMBER_MANAGER = frozenset({
     Permission.DEPARTMENTS_MEMBERS_MANAGE,
     Permission.ORGANIZATIONS_ONBOARDING_MANAGE,
 })
+
+
+def _grants_by_membership(organization, membership_ids):
+    from .models import RoleAssignment
+
+    grants = defaultdict(lambda: defaultdict(dict))
+    assignments = RoleAssignment.objects.filter(
+        organization=organization, role__organization=organization,
+        organization_membership_id__in=membership_ids,
+        revoked_at__isnull=True, role__is_archived=False, role__permissions__isnull=False,
+    ).filter(
+        Q(department_membership__isnull=True)
+        | Q(
+            department_membership__is_active=True,
+            department_membership__organization=organization,
+            department_membership__organization_membership=F("organization_membership"),
+            department_membership__department__organization=organization,
+            department_membership__department__is_archived=False,
+        )
+    )
+    for membership_id, code, include_descendants, department_id in assignments.values_list(
+        "organization_membership_id", "role__permissions__code",
+        "role__permissions__include_descendants", "department_membership__department_id",
+    ):
+        scopes = grants[membership_id][code]
+        scopes[department_id] = scopes.get(department_id, False) or include_descendants
+    return grants
 
 
 class Access:
@@ -89,30 +118,7 @@ class Access:
 
     @cached_property
     def _grants(self):
-        grants = defaultdict(dict)
-        assignments = self.membership.role_assignments.filter(
-            organization=self.organization, role__organization=self.organization,
-            revoked_at__isnull=True, role__is_archived=False,
-        ).filter(
-            Q(department_membership__isnull=True)
-            | Q(
-                department_membership__is_active=True,
-                department_membership__organization=self.organization,
-                department_membership__organization_membership=self.membership,
-                department_membership__department__organization=self.organization,
-                department_membership__department__is_archived=False,
-            )
-        )
-        for code, include_descendants, department_id in assignments.filter(
-            role__permissions__isnull=False,
-        ).values_list(
-            "role__permissions__code",
-            "role__permissions__include_descendants",
-            "department_membership__department_id",
-        ):
-            scopes = grants[code]
-            scopes[department_id] = scopes.get(department_id, False) or include_descendants
-        return grants
+        return _grants_by_membership(self.organization, [self.membership.pk])[self.membership.pk]
 
     @cached_property
     def _parents(self):
@@ -150,3 +156,22 @@ class Access:
 
 def can(user, action, organization, department=None, include_descendants=False):
     return Access(user, organization).allows(action, department, include_descendants)
+
+
+def accesses_for_memberships(organization, memberships):
+    memberships = [
+        membership for membership in memberships
+        if membership.organization_id == organization.pk and membership.is_active and membership.user.is_active
+    ]
+    if not memberships:
+        return {}
+    grants = _grants_by_membership(organization, [membership.pk for membership in memberships])
+    parents = dict(organization.departments.filter(is_archived=False).values_list("id", "parent_id"))
+    accesses = {}
+    for membership in memberships:
+        access = Access(membership.user, organization)
+        access.membership = membership
+        access._grants = grants[membership.pk]
+        access._parents = parents
+        accesses[membership.pk] = access
+    return accesses

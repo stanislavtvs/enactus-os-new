@@ -37,10 +37,13 @@ SCOPED_ROUTES = {
     "organization-staffing-request",
     "organization-manage",
     "organization-settings",
+    "organization-notification-policy",
 }
 
 PAGE_TITLES = {
     "notifications": "Уведомления",
+    "notification-preferences": "Личные настройки уведомлений",
+    "organization-notification-policy": "Уведомления организации",
     "home": "Мои организации",
     "organization-list": "Мои организации",
     "organization-detail": "Обзор",
@@ -136,6 +139,8 @@ def _workspace_links(request, workspace, route):
             access.allows(Permission.ORGANIZATIONS_ONBOARDING_MANAGE), (),
         ),
         ("organization-settings", "Настройки организации", "settings", access.is_owner, ()),
+        ("organization-notification-policy", "Уведомления организации", "settings",
+         access.allows(Permission.NOTIFICATIONS_MANAGE), ()),
     )
     return [
         _link(name, label, icon, route, org_id=workspace.pk, related=related)

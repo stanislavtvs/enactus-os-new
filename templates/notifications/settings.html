@@ -1,0 +1,117 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}{% if personal %}Личные настройки уведомлений{% else %}Уведомления организации{% endif %} — Enactus OS{% endblock %}
+{% block extra_head %}
+    <link rel="stylesheet" href="{% static 'ui/collection.css' %}">
+    <link rel="stylesheet" href="{% static 'notifications/settings.css' %}">
+    <script type="module" src="{% static 'notifications/settings.js' %}"></script>
+{% endblock %}
+
+{% block content %}
+    {% if not personal %}
+        <nav class="breadcrumbs" aria-label="Путь к странице">
+            <a href="{% url 'organization-detail' org_id=organization.id %}">{{ organization.name }}</a>
+        </nav>
+    {% endif %}
+    <section id="notification-settings" data-api-url="{{ settings_api_url }}"
+             data-personal="{{ personal|yesno:'true,false' }}"{% if organization %} data-organization-id="{{ organization.id }}"{% endif %}
+             aria-labelledby="notification-settings-heading">
+        <header class="page-heading collection-header">
+            <div>
+                {% if organization and not personal %}<p class="eyebrow">{{ organization.name }}</p>{% endif %}
+                <h1 id="notification-settings-heading">{% if personal %}Личные настройки уведомлений{% else %}Уведомления организации{% endif %}</h1>
+                <p class="muted">
+                    {% if personal %}Выберите, какие уведомления получать от каждой организации.
+                    {% else %}Выберите категории и время напоминаний для участников организации.{% endif %}
+                </p>
+            </div>
+            <a class="button collection-secondary" href="{% url 'notifications' %}">К уведомлениям</a>
+        </header>
+        <noscript><p>Включите JavaScript, чтобы загрузить настройки.</p></noscript>
+
+        {% if personal %}
+            {% if organizations %}
+                <div class="form-field notification-settings-choice">
+                    <label for="notification-settings-organization">Организация</label>
+                    <select id="notification-settings-organization">
+                        {% for item in organizations %}
+                            <option value="{{ item.id }}">{{ item.name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+            {% else %}
+                <p class="muted">Личные настройки доступны для организаций, в которых вы состоите.</p>
+            {% endif %}
+        {% endif %}
+
+        <p id="notification-settings-status" class="muted notification-settings-message" role="status"></p>
+        <p id="notification-settings-error" tabindex="-1" class="form-errors notification-settings-message" role="alert"></p>
+        <button id="notification-settings-retry" class="button collection-secondary" type="button" hidden>Загрузить настройки</button>
+        <form id="notification-settings-form" class="form-stack" method="post" hidden>
+            {% csrf_token %}
+            <fieldset class="notification-settings-panel">
+                <legend>Категории уведомлений</legend>
+                <p class="muted">{% if personal %}Личные предпочтения применяются в пределах правил выбранной организации.
+                    {% else %}Отключённые категории и типы исключаются из доставки. Назначения задач, приглашения и ответы RSVP продолжают работать.{% endif %}</p>
+                <div id="notification-settings-categories" class="notification-settings-categories"></div>
+            </fieldset>
+
+            {% if personal %}
+                <fieldset class="notification-settings-panel">
+                    <legend>Напоминания и тихие часы</legend>
+                    <label class="notification-settings-check"><input type="checkbox" name="task_reminders"> Напоминания о задачах</label>
+                    <label class="notification-settings-check"><input type="checkbox" name="calendar_reminders"> Напоминания о встречах и мероприятиях</label>
+                    <div class="form-field">
+                        <label for="notification-settings-timezone">Часовой пояс</label>
+                        <input id="notification-settings-timezone" name="timezone" list="notification-settings-timezones" autocomplete="off" spellcheck="false" maxlength="64" required>
+                        <datalist id="notification-settings-timezones"></datalist>
+                        <p class="muted form-hint">Название часового пояса IANA, например Asia/Almaty.</p>
+                    </div>
+                    <label class="notification-settings-check">
+                        <input type="checkbox" id="notification-settings-quiet" aria-controls="notification-settings-quiet-times"> Включить тихие часы
+                    </label>
+                    <div id="notification-settings-quiet-times" class="notification-settings-grid" hidden>
+                        <div class="form-field">
+                            <label for="notification-settings-quiet-start">Начало тихих часов</label>
+                            <input type="time" name="quiet_start" id="notification-settings-quiet-start">
+                        </div>
+                        <div class="form-field">
+                            <label for="notification-settings-quiet-end">Конец тихих часов</label>
+                            <input type="time" name="quiet_end" id="notification-settings-quiet-end">
+                        </div>
+                    </div>
+                    <p class="muted">Тихие часы применяются к плановым напоминаниям в указанном часовом поясе. Интервал может продолжаться после полуночи.</p>
+                </fieldset>
+            {% else %}
+                <details class="notification-settings-panel" id="notification-settings-task-reminders">
+                    <summary>Напоминания о задачах</summary>
+                    <fieldset class="notification-settings-options">
+                        <legend>До срока задачи</legend>
+                        <div id="notification-settings-task-offsets" class="notification-settings-checks"></div>
+                    </fieldset>
+                    <label class="notification-settings-check"><input type="checkbox" name="task_overdue"> Уведомлять о просроченных задачах</label>
+                    <label class="notification-settings-check"><input type="checkbox" name="include_collaborators"> Напоминать соисполнителям</label>
+                </details>
+                <details class="notification-settings-panel" id="notification-settings-calendar-reminders">
+                    <summary>Напоминания о встречах и мероприятиях</summary>
+                    <fieldset class="notification-settings-options">
+                        <legend>До начала события</legend>
+                        <div id="notification-settings-calendar-offsets" class="notification-settings-checks"></div>
+                    </fieldset>
+                    <label class="notification-settings-check"><input type="checkbox" name="calendar_informational"> Напоминать об информационных событиях</label>
+                    <div class="form-field">
+                        <label for="notification-settings-all-day-time">Время напоминания о событии на весь день</label>
+                        <input type="time" id="notification-settings-all-day-time" name="all_day_reminder_time" required>
+                        <p class="muted form-hint">В часовом поясе события.</p>
+                    </div>
+                </details>
+            {% endif %}
+
+            <div class="notification-settings-actions">
+                <button id="notification-settings-save" class="button button-primary" type="submit">Сохранить настройки</button>
+                <p id="notification-settings-feedback" class="muted notification-settings-message" role="status"></p>
+            </div>
+        </form>
+    </section>
+{% endblock %}

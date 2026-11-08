@@ -1,9 +1,9 @@
 import logging
-from datetime import date
+from datetime import date, datetime, timedelta, timezone as datetime_timezone
 from uuid import uuid4
 
 from django.db import transaction
-from django.db.models import Q
+from django.db.models import F, Q
 from django.http import Http404
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
@@ -27,6 +27,21 @@ SAFE_TECHNICAL_IDS = frozenset({
     "stage_id", "request_id", "allocation_id", "invitation_id", "review_id",
 })
 NEUTRAL_TITLE = "Объект больше недоступен"
+MAX_DELIVERY_ATTEMPTS = 5
+INITIAL_RETRY_SECONDS = 60
+SAFE_REMINDER_INTEGERS = frozenset({"offset_minutes", "schedule_revision", "occurrence_revision"})
+REMINDER_KINDS = frozenset({"task.reminder", "task.overdue", "calendar.reminder"})
+
+
+def _utc_timestamp(value):
+    try:
+        if isinstance(value, str):
+            value = datetime.fromisoformat(value)
+        if isinstance(value, datetime) and timezone.is_aware(value):
+            return value.astimezone(datetime_timezone.utc).isoformat()
+    except (OverflowError, ValueError):
+        pass
+    return None
 
 
 def _technical_data(data):
@@ -35,6 +50,14 @@ def _technical_data(data):
         key: value for key, value in data.items()
         if key in SAFE_TECHNICAL_IDS and type(value) is int and 0 < value <= 2**63 - 1
     }
+    safe.update({
+        key: value for key, value in data.items()
+        if key in SAFE_REMINDER_INTEGERS and type(value) is int and 0 <= value <= 2**63 - 1
+    })
+    for key in ("planned_at", "reference_at"):
+        timestamp = _utc_timestamp(data.get(key))
+        if timestamp is not None:
+            safe[key] = timestamp
     occurrence_key = data.get("occurrence_key")
     if type(occurrence_key) is date:
         safe["occurrence_key"] = occurrence_key.isoformat()
@@ -64,67 +87,146 @@ def _eligible_recipients(organization_id, kind, object_type, object_id, recipien
 
 
 def _deliver_notifications(event):
+    from .policy import policy_allows, policy_for
+    from .preferences import preference_allows, preferences_for
+
+    if not policy_allows(policy_for(event.organization_id), kind=event.kind, category=event.category):
+        return
     recipient_ids = _eligible_recipients(
         event.organization_id, event.kind, event.object_type, event.object_id, event.recipient_ids,
     )
+    preferences = {} if event.kind == PREJOIN_KIND else preferences_for(event.organization_id, recipient_ids)
     Notification.objects.bulk_create([
         Notification(organization_id=event.organization_id, event=event, recipient_id=recipient_id)
         for recipient_id in recipient_ids
+        if preference_allows(preferences.get(recipient_id), kind=event.kind, category=event.category)
     ], batch_size=1000, ignore_conflicts=True)
 
 
-@transaction.atomic
-def deliver_event(event_id):
-    event = NotificationEvent.objects.select_for_update().get(pk=event_id)
+def _delivery_gate(event, now):
+    if event.kind not in REMINDER_KINDS:
+        return True, None
+    from .reminders import reminder_delivery
+
+    return reminder_delivery(event, now)
+
+
+def _process_event(event, now):
     if event.delivered_at is not None:
         return event
 
-    now = timezone.now()
-    event.delivery_attempts += 1
-    event.last_attempt_at = now
+    error = None
     try:
         with transaction.atomic():
-            _deliver_notifications(event)
+            allowed, defer_until = _delivery_gate(event, now)
+            if allowed:
+                _deliver_notifications(event)
     except Exception as exc:
+        error = exc
+    else:
+        if not allowed and defer_until is not None:
+            if event.failed_at is None:
+                event.next_attempt_at = max(defer_until, now + timedelta(seconds=1))
+                event.save(update_fields=["next_attempt_at"])
+            return event
+
+    event.delivery_attempts += 1
+    event.last_attempt_at = now
+    if error is not None:
         # A delivery failure must leave an observable, retryable event
         # without committing partial recipient rows.
-        event.last_error = type(exc).__name__[:80]
-        logger.warning("Notification event %s delivery postponed (%s)", event.pk, event.last_error)
+        event.last_error = type(error).__name__[:80]
+        if event.delivery_attempts >= MAX_DELIVERY_ATTEMPTS:
+            event.failed_at = event.failed_at or now
+            event.next_attempt_at = None
+        else:
+            delay = INITIAL_RETRY_SECONDS * 2 ** (event.delivery_attempts - 1)
+            event.next_attempt_at = now + timedelta(seconds=delay)
+        outcome = "failed" if event.failed_at is not None else "postponed"
+        logger.warning("Notification event %s delivery %s (%s)", event.pk, outcome, event.last_error)
     else:
         event.delivered_at = now
+        event.failed_at = None
+        event.next_attempt_at = None
         event.last_error = ""
-    event.save(update_fields=["delivery_attempts", "last_attempt_at", "last_error", "delivered_at"])
+    event.save(update_fields=[
+        "delivery_attempts", "last_attempt_at", "last_error", "delivered_at", "failed_at", "next_attempt_at",
+    ])
     return event
 
 
 @transaction.atomic
-def publish(*, organization_id, actor_id, kind, object_id, recipient_ids, object_type, key=None, data=None):
+def deliver_event(event_id, *, now=None):
+    event = NotificationEvent.objects.select_for_update().get(pk=event_id)
+    return _process_event(event, now if now is not None else timezone.now())
+
+
+@transaction.atomic
+def publish(
+    *, organization_id, actor_id, kind, object_id, recipient_ids, object_type,
+    key=None, data=None, deliver_after=None, now=None,
+):
+    now = now if now is not None else timezone.now()
     category = CATEGORIES[kind.split(".", 1)[0]]
     key = key if key is not None else uuid4().hex
     snapshot = _eligible_recipients(
         organization_id, kind, object_type, object_id, sorted(set(recipient_ids) - {actor_id}),
     )
-    event, _ = NotificationEvent.objects.get_or_create(
+    event, created = NotificationEvent.objects.get_or_create(
         organization_id=organization_id, idempotency_key=key,
         defaults={
             "actor_id": actor_id, "kind": kind, "category": category,
             "object_type": object_type, "object_id": object_id,
             "data": _technical_data(data), "recipient_ids": snapshot,
+            "next_attempt_at": deliver_after if deliver_after is not None and deliver_after > now else None,
         },
     )
     if (event.kind, event.object_type, event.object_id) != (kind, object_type, object_id):
         raise ValueError("Notification idempotency key already refers to a different operation.")
-    return deliver_event(event.pk)
+    if not created or event.next_attempt_at is not None:
+        return event
+    return _process_event(event, now)
 
 
-def retry_pending(limit=100):
+def _retry(limit, *, due_only, now):
     if not 1 <= limit <= 1000:
         raise ValueError("Retry limit must be between 1 and 1000.")
-    ids = list(NotificationEvent.objects.filter(delivered_at__isnull=True).order_by("pk").values_list(
-        "pk", flat=True,
-    )[:limit])
-    delivered = sum(deliver_event(event_id).delivered_at is not None for event_id in ids)
-    return {"processed": len(ids), "delivered": delivered, "pending": len(ids) - delivered}
+    rows = NotificationEvent.objects.filter(delivered_at__isnull=True)
+    if due_only:
+        rows = rows.filter(failed_at__isnull=True).filter(
+            Q(next_attempt_at__isnull=True) | Q(next_attempt_at__lte=now),
+        )
+    rows = rows.order_by(F("next_attempt_at").asc(nulls_first=True), "pk")
+    attempted = set()
+    delivered = failed = 0
+    for _ in range(limit):
+        with transaction.atomic():
+            event = rows.exclude(pk__in=attempted).select_for_update(skip_locked=True).first()
+            if event is None:
+                break
+            attempted.add(event.pk)
+            if due_only and event.delivery_attempts >= MAX_DELIVERY_ATTEMPTS:
+                # Pending records from before retry scheduling can already
+                # have exhausted the automatic attempt budget.
+                event.failed_at = event.last_attempt_at or now
+                event.next_attempt_at = None
+                event.save(update_fields=["failed_at", "next_attempt_at"])
+            else:
+                _process_event(event, now)
+            delivered += event.delivered_at is not None
+            failed += event.failed_at is not None
+    return {
+        "processed": len(attempted), "delivered": delivered,
+        "pending": len(attempted) - delivered - failed, "failed": failed,
+    }
+
+
+def retry_due(limit=100, *, now=None):
+    return _retry(limit, due_only=True, now=now if now is not None else timezone.now())
+
+
+def retry_pending(limit=100, *, now=None):
+    return _retry(limit, due_only=False, now=now if now is not None else timezone.now())
 
 
 def _recipient_rows(user):

@@ -21,9 +21,10 @@ services:
       retries: 30
 
   web:
+    image: &app-image "${COMPOSE_PROJECT_NAME:-enactus_os_next_dev}-web"
     build: .
     command: ["sh", "-c", "python manage.py migrate --noinput && exec python manage.py runserver 0.0.0.0:8000 --noreload"]
-    environment:
+    environment: &app-environment
       DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY:?Run python3 scripts/init-env.py}
       DJANGO_DEBUG: ${DJANGO_DEBUG:-0}
       DJANGO_ALLOWED_HOSTS: ${DJANGO_ALLOWED_HOSTS:-localhost,127.0.0.1}
@@ -42,6 +43,19 @@ services:
       interval: 3s
       timeout: 3s
       retries: 30
+
+  worker:
+    image: *app-image
+    pull_policy: never
+    command: ["python", "manage.py", "notification_worker"]
+    environment: *app-environment
+    depends_on:
+      db:
+        condition: service_healthy
+      web:
+        condition: service_healthy
+    restart: on-failure
+    stop_grace_period: 30s
 
 volumes:
   postgres_data:

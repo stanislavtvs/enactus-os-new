@@ -1,0 +1,52 @@
+.notification-settings-choice { max-width: 27rem; margin-block-end: var(--space-md); }
+.notification-settings-choice select {
+    min-height: 2.75rem;
+    width: 100%;
+    padding: .55rem .7rem;
+    border: 1px solid var(--input-line);
+    border-radius: .55rem;
+    background: var(--surface);
+    color: var(--ink);
+}
+#notification-settings-form { max-width: 49rem; }
+.notification-settings-panel {
+    min-inline-size: 0;
+    margin: 0;
+    padding: var(--space-md);
+    border: 1px solid var(--line);
+    border-radius: .8rem;
+    background: var(--surface);
+}
+.notification-settings-panel > legend, .notification-settings-panel > summary {
+    font-weight: 750;
+}
+.notification-settings-panel > legend { padding-inline: .35rem; }
+.notification-settings-panel > summary { cursor: pointer; }
+details.notification-settings-panel[open] > :not(summary) { margin-block-start: var(--space-sm); }
+.notification-settings-panel > .form-field { max-width: 27rem; margin-block: var(--space-sm); }
+.notification-settings-categories, .notification-settings-grid, .notification-settings-checks {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--space-xs) var(--space-md);
+}
+.notification-settings-categories { margin-block-start: var(--space-sm); }
+.notification-settings-category { min-inline-size: 0; padding: .25rem .6rem; border-radius: .55rem; background: var(--subtle); }
+.notification-settings-category summary { cursor: pointer; color: var(--muted); font-size: .86rem; }
+.notification-settings-category details { margin: 0 0 .35rem 1.35rem; }
+.notification-settings-check {
+    display: flex;
+    align-items: start;
+    gap: .45rem;
+    min-height: 2.1rem;
+    padding-block: .3rem;
+    overflow-wrap: anywhere;
+}
+.notification-settings-check input { flex: none; margin-block-start: .32em; accent-color: var(--focus); }
+.notification-settings-options { min-inline-size: 0; margin-inline: 0; padding: 0; border: 0; }
+.notification-settings-options legend { font-weight: 650; }
+.notification-settings-actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-sm); }
+.notification-settings-message:empty { display: none; }
+.notification-settings-message:not(:empty) { margin-block: var(--space-xs); }
+@media (max-width: 36rem) {
+    .notification-settings-categories, .notification-settings-grid, .notification-settings-checks { grid-template-columns: minmax(0, 1fr); }
+}
