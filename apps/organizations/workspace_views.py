@@ -5,6 +5,7 @@ from django.db import transaction
 from django.db.models import F
 from django.http import Http404
 from django.shortcuts import get_object_or_404, redirect, render
+from django.urls import reverse
 from django.views.decorators.http import require_GET, require_POST, require_http_methods
 
 from apps.access.policy import Access
@@ -131,11 +132,20 @@ def organization_settings(request, org_id):
                 return redirect("organization-settings", org_id=org_id)
     return render(request, "organizations/settings.html", {
         "organization": organization,
+        "ownership_api_url": reverse("api-1.0.0:ownership_transfer", kwargs={"org_id": org_id}),
         "policy_form": form,
         "assignment_form": assignment_form,
         "task_assignment_form": task_assignment_form,
         "review_form": review_form,
     }, status=status)
+
+
+@login_required
+@require_GET
+def ownership_inbox(request):
+    return render(request, "organizations/ownership_inbox.html", {
+        "ownership_inbox_api_url": reverse("api-1.0.0:ownership_transfer_inbox"),
+    })
 
 
 @login_required

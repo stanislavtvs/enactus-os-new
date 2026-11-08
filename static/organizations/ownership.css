@@ -1,0 +1,35 @@
+.ownership-panel { margin-block-end: var(--space-md); }
+.ownership-header, .ownership-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-sm);
+}
+.ownership-header h2 { margin-block-end: var(--space-xs); }
+.ownership-list { display: grid; gap: var(--space-sm); margin: 0; padding: 0; list-style: none; }
+.ownership-row {
+    display: grid;
+    gap: var(--space-xs);
+    padding: var(--space-md);
+    border: 1px solid var(--line);
+    border-radius: .65rem;
+    background: var(--surface);
+    overflow-wrap: anywhere;
+}
+#ownership-pending:not(:empty) { margin-block-start: var(--space-sm); }
+#ownership-pending .ownership-row { padding: var(--space-sm); background: var(--subtle); }
+.ownership-actions { justify-content: start; margin-block-start: var(--space-xs); }
+.ownership-dialog select {
+    width: 100%;
+    min-height: 2.75rem;
+    padding: .55rem .7rem;
+    border: 1px solid var(--input-line);
+    border-radius: .55rem;
+    background: var(--surface);
+    color: var(--ink);
+}
+.ownership-confirm { display: flex; align-items: start; gap: var(--space-xs); }
+.ownership-confirm input { flex: none; margin-block-start: .32em; accent-color: var(--focus); }
+.ownership-message:empty { display: none; }
+.ownership-message:not(:empty) { margin-block: var(--space-xs); }

@@ -285,8 +285,7 @@ def can_open_review_inbox(access):
     )
 
 
-def review_inbox(*, user, org_id):
-    access = organization_access(user=user, org_id=org_id)
+def visible_review_stages(access):
     latest = TaskReviewSubmission.objects.filter(
         organization=access.organization, task_id=OuterRef("task_id"),
     ).order_by("-id").values("id")[:1]
@@ -295,7 +294,12 @@ def review_inbox(*, user, org_id):
     ).exclude(task__project__is_archived=True).annotate(_latest_submission=Subquery(latest)).filter(
         submission_id=F("_latest_submission"),
     ).order_by("task_id", "position").distinct("task_id")
-    return [stage for stage in stages if _can_read_stage(access, stage)]
+    return (stage for stage in stages.iterator(chunk_size=100) if _can_read_stage(access, stage))
+
+
+def review_inbox(*, user, org_id):
+    access = organization_access(user=user, org_id=org_id)
+    return list(visible_review_stages(access))
 
 
 def _review_recipients(organization, stage):

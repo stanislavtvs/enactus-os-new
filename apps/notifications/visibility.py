@@ -1,7 +1,7 @@
 from collections import defaultdict
 from urllib.parse import urlencode
 
-from django.db.models import Exists, F, OuterRef, Subquery
+from django.db.models import Exists, F, OuterRef, Q, Subquery
 from django.urls import reverse
 from django.utils import timezone
 
@@ -34,6 +34,10 @@ TITLES = {
     "calendar.cancelled": "Событие отменено",
     "calendar.occurrence_cancelled": "Отдельная встреча отменена",
     "calendar.series_stopped": "Будущие встречи серии остановлены",
+    "organization.ownership_offered": "Предложение принять владение",
+    "organization.ownership_accepted": "Владение организацией передано",
+    "organization.ownership_declined": "Предложение принять владение отклонено",
+    "organization.ownership_revoked": "Предложение принять владение отозвано",
     "organization.invited": "Приглашение в организацию",
     "department.invited": "Приглашение в подразделение",
 }
@@ -146,6 +150,30 @@ RESOLVERS = {
 }
 
 
+def _ownership_rows(access, ids):
+    from apps.organizations.models import OwnershipTransfer
+
+    rows = OwnershipTransfer.objects.filter(
+        organization=access.organization, pk__in=ids,
+    ).filter(Q(from_owner=access.membership) | Q(recipient=access.membership))
+    return {row.pk: row for row in rows.select_related("organization", "from_owner__user", "recipient__user")}
+
+
+def _ownership_target(access, row, kind):
+    if row is None:
+        return None
+    if kind == "organization.ownership_offered":
+        from apps.organizations.ownership import offer_data
+
+        if row.recipient_id != access.membership.pk or offer_data(row)["status"] != "pending":
+            return None
+    route = (
+        reverse("ownership-inbox") if row.recipient_id == access.membership.pk
+        else reverse("organization-detail", args=[access.organization.pk])
+    )
+    return access.organization.name, route
+
+
 def presentation(user, events):
     groups = defaultdict(list)
     organizations = {}
@@ -177,8 +205,13 @@ def presentation(user, events):
         access = access_by_org.get(org_id)
         resolver = RESOLVERS.get(object_type)
         targets = resolver(access, {event.object_id for event in entries}) if access and resolver else {}
+        ownership = _ownership_rows(access, {event.object_id for event in entries}) if (
+            access and object_type == "ownership_transfer"
+        ) else {}
         for event in entries:
             target = targets.get(event.object_id)
+            if ownership:
+                target = _ownership_target(access, ownership.get(event.object_id), event.kind)
             if (
                 object_type == "organization_invitation" and event.kind == "organization.invited"
                 and (org_id, event.object_id) in org_invites

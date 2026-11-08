@@ -38,7 +38,9 @@ def policy_allows(policy, *, kind, category):
 def _kind_labels():
     from .visibility import TITLES
 
-    return {**TITLES, **REMINDER_TITLES}
+    from .services import OWNERSHIP_KINDS
+
+    return {kind: label for kind, label in {**TITLES, **REMINDER_TITLES}.items() if kind not in OWNERSHIP_KINDS}
 
 
 def _options():

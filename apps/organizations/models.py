@@ -1,6 +1,6 @@
 from django.conf import settings
 from django.db import models
-from django.db.models import Q
+from django.db.models import F, Q
 
 ORGANIZATION_NAME_MAX_LENGTH = 200
 
@@ -166,5 +166,52 @@ class JoinRequest(models.Model):
                 fields=["organization", "applicant"],
                 condition=Q(status="pending"),
                 name="unique_pending_organization_join_request",
+            ),
+        ]
+
+
+class OwnershipTransfer(models.Model):
+    class Status(models.TextChoices):
+        PENDING = "pending", "Ожидает ответа"
+        ACCEPTED = "accepted", "Принято"
+        DECLINED = "declined", "Отклонено"
+        REVOKED = "revoked", "Отозвано"
+        EXPIRED = "expired", "Истекло"
+
+    organization = models.ForeignKey(
+        Organization, on_delete=models.PROTECT, related_name="ownership_transfers",
+    )
+    from_owner = models.ForeignKey(
+        OrganizationMembership, on_delete=models.PROTECT,
+        related_name="initiated_ownership_transfers",
+    )
+    recipient = models.ForeignKey(
+        OrganizationMembership, on_delete=models.PROTECT,
+        related_name="received_ownership_transfers",
+    )
+    status = models.CharField(max_length=8, choices=Status, default=Status.PENDING)
+    created_at = models.DateTimeField(auto_now_add=True)
+    expires_at = models.DateTimeField()
+    resolved_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["organization"], condition=Q(status="pending"),
+                name="unique_pending_ownership_transfer",
+            ),
+            models.CheckConstraint(
+                condition=~Q(from_owner=F("recipient")), name="ownership_transfer_distinct_members",
+            ),
+            models.CheckConstraint(
+                condition=Q(status="pending", resolved_at__isnull=True)
+                | Q(status__in=["accepted", "declined", "revoked", "expired"], resolved_at__isnull=False),
+                name="ownership_transfer_resolution_matches_status",
+            ),
+        ]
+        indexes = [
+            models.Index(
+                fields=["recipient", "-id"], condition=Q(status="pending"),
+                name="ownership_transfer_inbox_idx",
             ),
         ]

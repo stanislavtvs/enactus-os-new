@@ -36,6 +36,15 @@ def _objects(access, groups, departments, projects):
         },
         "organization": {organization.pk: _workspace_target(access, "organization-detail", organization.name)},
     }
+    if groups["ownership_transfer"] and access.is_owner:
+        from apps.organizations.models import OwnershipTransfer
+
+        targets["ownership_transfer"] = dict.fromkeys(
+            OwnershipTransfer.objects.filter(
+                organization=organization, pk__in=groups["ownership_transfer"],
+            ).values_list("pk", flat=True),
+            _workspace_target(access, "organization-settings", "Передача владения"),
+        )
     if access.allows(Permission.ORGANIZATIONS_ONBOARDING_MANAGE):
         for kind, rows in (
             ("organization_invitation", organization.invitations),

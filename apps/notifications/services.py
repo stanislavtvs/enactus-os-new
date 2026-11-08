@@ -14,6 +14,10 @@ from .models import Notification, NotificationEvent
 
 logger = logging.getLogger(__name__)
 PREJOIN_KIND = "organization.invited"
+OWNERSHIP_KINDS = frozenset({
+    "organization.ownership_offered", "organization.ownership_accepted",
+    "organization.ownership_declined", "organization.ownership_revoked",
+})
 CATEGORIES = {
     "task": NotificationEvent.Category.TASKS,
     "review": NotificationEvent.Category.REVIEWS,
@@ -90,12 +94,13 @@ def _deliver_notifications(event):
     from .policy import policy_allows, policy_for
     from .preferences import preference_allows, preferences_for
 
-    if not policy_allows(policy_for(event.organization_id), kind=event.kind, category=event.category):
+    required = event.object_type == "ownership_transfer" and event.kind in OWNERSHIP_KINDS
+    if not required and not policy_allows(policy_for(event.organization_id), kind=event.kind, category=event.category):
         return
     recipient_ids = _eligible_recipients(
         event.organization_id, event.kind, event.object_type, event.object_id, event.recipient_ids,
     )
-    preferences = {} if event.kind == PREJOIN_KIND else preferences_for(event.organization_id, recipient_ids)
+    preferences = {} if required or event.kind == PREJOIN_KIND else preferences_for(event.organization_id, recipient_ids)
     Notification.objects.bulk_create([
         Notification(organization_id=event.organization_id, event=event, recipient_id=recipient_id)
         for recipient_id in recipient_ids
@@ -169,9 +174,10 @@ def publish(
     now = now if now is not None else timezone.now()
     category = CATEGORIES[kind.split(".", 1)[0]]
     key = key if key is not None else uuid4().hex
-    snapshot = _eligible_recipients(
-        organization_id, kind, object_type, object_id, sorted(set(recipient_ids) - {actor_id}),
-    )
+    targets = set(recipient_ids)
+    if object_type != "ownership_transfer" or kind not in OWNERSHIP_KINDS:
+        targets.discard(actor_id)
+    snapshot = _eligible_recipients(organization_id, kind, object_type, object_id, sorted(targets))
     event, created = NotificationEvent.objects.get_or_create(
         organization_id=organization_id, idempotency_key=key,
         defaults={

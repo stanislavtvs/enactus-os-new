@@ -5,6 +5,7 @@ from django.urls import reverse
 from apps.access.policy import Access
 from apps.projects.services import can_open_projects, visible_projects
 
+from .dashboard import dashboard
 from .services import can_create_organization, visible_organizations
 from .workspaces import can_view_organization_members, current_workspace
 
@@ -34,6 +35,7 @@ def organization_list(request):
 def organization_detail(request, org_id):
     organization = get_object_or_404(visible_organizations(request.user), pk=org_id)
     access = Access(request.user, organization)
+    projects = visible_projects(access=access) if can_open_projects(access) else None
     return render(request, "organizations/detail.html", {
         "organization": organization,
         "department_count": organization.departments.filter(is_archived=False).count(),
@@ -41,8 +43,6 @@ def organization_detail(request, org_id):
             organization.memberships.filter(is_active=True, user__is_active=True).count()
             if can_view_organization_members(access) else None
         ),
-        "project_count": (
-            sum(not project.is_archived for project in visible_projects(access=access))
-            if can_open_projects(access) else None
-        ),
+        "project_count": sum(not project.is_archived for project in projects) if projects is not None else None,
+        **dashboard(access, projects or []),
     })

@@ -4,6 +4,9 @@
 {% block title %}Настройки организации — {{ organization.name }} — Enactus OS{% endblock %}
 {% block extra_head %}
     <link rel="stylesheet" href="{% static 'organizations/onboarding.css' %}">
+    <link rel="stylesheet" href="{% static 'ui/collection.css' %}">
+    <link rel="stylesheet" href="{% static 'organizations/ownership.css' %}">
+    <script type="module" src="{% static 'organizations/ownership.js' %}"></script>
 {% endblock %}
 
 {% block content %}
@@ -13,6 +16,46 @@
         <p>Настройте вступление в организацию, включение в проектные команды и назначение задач.</p>
         <a class="button" href="{% url 'organization-notification-policy' org_id=organization.id %}">Уведомления</a>
     </header>
+    <section class="card card-padded ownership-panel" id="ownership-app" data-ownership-mode="manage"
+             data-api-url="{{ ownership_api_url }}" aria-labelledby="ownership-heading">
+        <div class="ownership-header">
+            <div>
+                <h2 id="ownership-heading" tabindex="-1">Владение организацией</h2>
+                <p class="muted">Текущий владелец: <strong id="ownership-current-owner">{{ organization.owner.get_username }}</strong></p>
+            </div>
+            <button id="ownership-create" class="button collection-secondary" type="button" aria-haspopup="dialog"
+                    aria-controls="ownership-dialog" hidden>Передать владение</button>
+        </div>
+        <p class="muted ownership-message" id="ownership-status" role="status"></p>
+        <p class="form-errors ownership-message" id="ownership-error" role="alert"></p>
+        <button id="ownership-retry" class="button collection-secondary" type="button" hidden>Обновить предложения</button>
+        <div id="ownership-pending"></div>
+        <dialog id="ownership-dialog" class="collection-dialog ownership-dialog" aria-labelledby="ownership-dialog-heading">
+            <header class="collection-dialog-header">
+                <h2 id="ownership-dialog-heading">Передать владение</h2>
+                <button class="button collection-secondary" type="button" data-dialog-close aria-label="Закрыть форму">
+                    <svg class="icon" aria-hidden="true"><use href="#icon-close"/></svg>
+                </button>
+            </header>
+            <form class="form-stack" id="ownership-form" method="post">
+                {% csrf_token %}
+                <p>После принятия предложения выбранный участник получит все полномочия владельца. Ваше членство и отдельно назначенные роли сохранятся, а полномочия владельца перейдут новому владельцу.</p>
+                <div class="form-field">
+                    <label for="ownership-recipient">Новый владелец</label>
+                    <select id="ownership-recipient" name="recipient_id" required></select>
+                </div>
+                <label class="ownership-confirm">
+                    <input type="checkbox" id="ownership-confirm" name="confirm" required>
+                    Подтверждаю отправку предложения о передаче владения
+                </label>
+                <p id="ownership-form-error" class="form-errors ownership-message" role="alert"></p>
+                <div class="collection-dialog-actions">
+                    <button class="button collection-secondary" type="button" data-dialog-close>Закрыть</button>
+                    <button class="button button-primary" id="ownership-send" type="submit">Отправить предложение</button>
+                </div>
+            </form>
+        </dialog>
+    </section>
     <section class="card card-padded onboarding" aria-labelledby="organization-policy-heading">
         <h2 id="organization-policy-heading">Правила вступления</h2>
         {% if error %}<p class="onboarding-notice form-errors" role="alert">{{ error }}</p>{% endif %}

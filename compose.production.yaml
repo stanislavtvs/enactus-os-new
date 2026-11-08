@@ -1,0 +1,89 @@
+name: enactus_os_next_prod
+
+x-app-image: &app-image "${COMPOSE_PROJECT_NAME:-enactus_os_next_prod}-web"
+x-app-environment: &app-environment
+  DJANGO_SETTINGS_MODULE: config.settings_production
+  DJANGO_PUBLIC_HOST: ${DJANGO_PUBLIC_HOST:?Set the HTTPS host in .env.production}
+  DJANGO_SECRET_KEY: ${ENACTUS_PROD_SECRET_KEY:?Set a production key in .env.production}
+  POSTGRES_DB: enactus_os_next_prod
+  POSTGRES_USER: enactus_os_next_prod
+  POSTGRES_PASSWORD: ${ENACTUS_PROD_POSTGRES_PASSWORD:?Set a production database password in .env.production}
+  POSTGRES_HOST: db
+  POSTGRES_PORT: "5432"
+
+services:
+  db:
+    image: postgres:16-bookworm
+    environment:
+      POSTGRES_DB: enactus_os_next_prod
+      POSTGRES_USER: enactus_os_next_prod
+      POSTGRES_PASSWORD: ${ENACTUS_PROD_POSTGRES_PASSWORD:?Set a production database password in .env.production}
+    volumes:
+      - production_postgres_data:/var/lib/postgresql/data
+    restart: unless-stopped
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - >-
+          PGPASSWORD="$$POSTGRES_PASSWORD" psql --no-psqlrc --no-password
+          --host=127.0.0.1 --username="$$POSTGRES_USER" --dbname="$$POSTGRES_DB"
+          --set=ON_ERROR_STOP=1 --command='SELECT 1' >/dev/null 2>&1
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  migrate:
+    image: *app-image
+    pull_policy: never
+    command: ["python", "manage.py", "migrate", "--noinput"]
+    environment: *app-environment
+    depends_on:
+      db:
+        condition: service_healthy
+
+  web:
+    image: *app-image
+    build: .
+    command:
+      - sh
+      - -c
+      - >-
+        python manage.py collectstatic --noinput &&
+        exec gunicorn --bind 0.0.0.0:8000 --workers 2 config.wsgi:application
+    environment: *app-environment
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    ports:
+      - "127.0.0.1:${PRODUCTION_WEB_PORT:-8004}:8000"
+    restart: unless-stopped
+    stop_grace_period: 35s
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - >-
+          import os; from urllib.request import Request, urlopen;
+          request = Request('http://127.0.0.1:8000/api/v1/health/',
+          headers={'Host': os.environ['DJANGO_PUBLIC_HOST'].lower(), 'X-Forwarded-Proto': 'https'});
+          urlopen(request, timeout=2).close()
+      interval: 3s
+      timeout: 3s
+      retries: 30
+
+  worker:
+    image: *app-image
+    pull_policy: never
+    command: ["python", "manage.py", "notification_worker"]
+    environment: *app-environment
+    depends_on:
+      db:
+        condition: service_healthy
+      web:
+        condition: service_healthy
+    restart: unless-stopped
+    stop_grace_period: 30s
+
+volumes:
+  production_postgres_data:

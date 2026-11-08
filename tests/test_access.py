@@ -120,10 +120,10 @@ class AccessTests(TestCase):
         self.assertTrue(Access(self.legacy, self.org).allows(Permission.DEPARTMENTS_UPDATE))
         self.assertFalse(Access(self.legacy, self.org).allows(Permission.ROLES_MANAGE))
 
-        self.org.memberships.filter(user=self.owner).update(is_active=False)
+        self.org.memberships.filter(user=self.legacy).update(is_active=False)
 
-        self.assertFalse(Access(self.owner, self.org).allows(Permission.ROLES_MANAGE))
-        self.client.force_login(self.owner)
+        self.assertFalse(Access(self.legacy, self.org).allows(Permission.DEPARTMENTS_READ))
+        self.client.force_login(self.legacy)
         self.assertEqual(self.client.get(f"{self.api}roles/").status_code, 404)
 
     def test_deactivation_clears_legacy_management_even_after_bulk_reactivation(self):

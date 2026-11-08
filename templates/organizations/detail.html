@@ -30,6 +30,92 @@
         {% endif %}
     </div>
 
+    <div class="overview-grid overview-info">
+        <section class="card card-padded" aria-labelledby="overview-my-tasks">
+            <h2 id="overview-my-tasks">Мои задачи</h2>
+            <ul class="member-list" role="list">
+                {% for task in personal_tasks %}
+                    <li>
+                        <a href="{% url 'organization-task' org_id=organization.id task_id=task.id %}">{{ task.name }}</a>
+                        <span class="muted">{% if task.workflow_status %}{{ task.workflow_status.name }}{% else %}{{ task.get_status_display }}{% endif %}</span>
+                    </li>
+                {% empty %}<li class="muted">У вас нет открытых задач.</li>{% endfor %}
+            </ul>
+            <a href="{% url 'organization-my-tasks' org_id=organization.id %}">Все мои задачи</a>
+        </section>
+
+        <section class="card card-padded" aria-labelledby="overview-attention">
+            <h2 id="overview-attention">Требуют внимания</h2>
+            <p class="muted">Просроченные и заблокированные задачи, а также результаты, которые вы можете проверить.</p>
+            <ul class="member-list" role="list">
+                {% for task in attention_tasks %}
+                    <li>
+                        <a href="{% url 'organization-task' org_id=organization.id task_id=task.id %}">{{ task.name }}</a>
+                        <span class="muted">{% if task.due_at and task.due_at < dashboard_now %}Просрочена{% else %}Заблокирована{% endif %}</span>
+                    </li>
+                {% endfor %}
+                {% for task in review_tasks %}
+                    <li>
+                        <a href="{% url 'organization-task' org_id=organization.id task_id=task.id %}">{{ task.name }}</a>
+                        <span class="muted">Ожидает вашей проверки</span>
+                    </li>
+                {% endfor %}
+                {% if not attention_tasks and not review_tasks %}<li class="muted">Таких задач нет.</li>{% endif %}
+            </ul>
+        </section>
+    </div>
+
+    <div class="overview-grid overview-info">
+        {% if project_count != None %}
+            <section class="card card-padded" aria-labelledby="overview-active-projects">
+                <h2 id="overview-active-projects">Активные проекты</h2>
+                <ul class="member-list" role="list">
+                    {% for project in active_projects %}
+                        <li><a href="{% url 'organization-project' org_id=organization.id project_id=project.id %}">{{ project.name }}</a></li>
+                    {% empty %}<li class="muted">Нет доступных активных проектов.</li>{% endfor %}
+                </ul>
+                <a href="{% url 'organization-projects' org_id=organization.id %}">Все проекты</a>
+            </section>
+        {% endif %}
+
+        <section class="card card-padded" aria-labelledby="overview-deadlines">
+            <h2 id="overview-deadlines">Ближайшие дедлайны</h2>
+            <p class="muted">Сегодня и следующие 6 дней · UTC</p>
+            <ul class="member-list" role="list">
+                {% for task in upcoming_deadlines %}
+                    <li>
+                        <a href="{% url 'organization-task' org_id=organization.id task_id=task.id %}">{{ task.name }}</a>
+                        <time class="muted" datetime="{{ task.due_at|date:'c' }}">{{ task.due_at|date:"j E, H:i" }}</time>
+                    </li>
+                {% empty %}<li class="muted">Нет доступных ближайших дедлайнов.</li>{% endfor %}
+            </ul>
+        </section>
+
+        {% if calendar_available %}
+            <section class="card card-padded" aria-labelledby="overview-events">
+                <h2 id="overview-events">Ближайшие события</h2>
+                <p class="muted">Сегодня и следующие 6 дней · UTC</p>
+                {% if calendar_overflow %}
+                    <p class="muted">В периоде много событий. Посмотрите расписание в календаре.</p>
+                {% else %}
+                    <ul class="member-list" role="list">
+                        {% for event in upcoming_events %}
+                            <li>
+                                <span>{{ event.title }}</span>
+                                {% if event.all_day %}
+                                    <time class="muted" datetime="{{ event.dashboard_day|date:'Y-m-d' }}">{{ event.dashboard_day|date:"j E" }} · Весь день</time>
+                                {% else %}
+                                    <time class="muted" datetime="{{ event.starts_at|date:'c' }}">{{ event.starts_at|date:"j E, H:i" }}</time>
+                                {% endif %}
+                            </li>
+                        {% empty %}<li class="muted">Нет доступных ближайших событий.</li>{% endfor %}
+                    </ul>
+                {% endif %}
+                <a href="{% url 'organization-calendar' org_id=organization.id %}">Открыть календарь</a>
+            </section>
+        {% endif %}
+    </div>
+
     <section class="card card-padded overview-info" aria-labelledby="organization-info">
         <h2 id="organization-info">Об организации</h2>
         <dl class="facts">

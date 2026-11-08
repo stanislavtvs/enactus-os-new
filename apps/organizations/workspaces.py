@@ -72,6 +72,7 @@ PAGE_TITLES = {
     "organization-access": "Роли и доступ",
     "organization-manage": "Управление вступлением",
     "organization-settings": "Настройки организации",
+    "ownership-inbox": "Предложения о передаче владения",
     "organization-invitations": "Приглашения в организации",
     "department-invitations": "Приглашения в подразделения",
     "organization-join": "Вступление в организацию",

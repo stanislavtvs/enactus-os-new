@@ -18,6 +18,7 @@ from apps.organizations.workspace_views import (
     organization_members,
     organization_settings,
     organization_switch,
+    ownership_inbox,
     user_profile,
 )
 
@@ -57,6 +58,7 @@ urlpatterns = [
     path("accounts/settings/", global_settings, name="global-settings"),
     path("organizations/<int:org_id>/", organization_detail, name="organization-detail"),
     path("organizations/<int:org_id>/manage/", organization_manage, name="organization-manage"),
+    path("organizations/ownership-transfers/", ownership_inbox, name="ownership-inbox"),
     path("organizations/invitations/", organization_invitations, name="organization-invitations"),
     path("organizations/join/<str:code>/", organization_join, name="organization-join"),
     path(

@@ -8,3 +8,5 @@ __pycache__/
 .coverage
 *.sqlite3
 *.dump
+*.dump.sha256
+collected_static/

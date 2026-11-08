@@ -502,3 +502,19 @@ PATCH принимает только изменяемые поля соотве
 Для списков доступны фильтры `q` по названию объекта, `actor_id`, `action`, `object_type`, `project_id`, `department_id`, `date_from`, `date_to`, `page`, `page_size`. Даты передаются в формате `YYYY-MM-DD` и включают обе границы в UTC. Страницы начинаются с 1. Размер страницы от 1 до 100, по умолчанию 25. Записи отсортированы от новых к старым по времени и идентификатору. Поиск, фильтры и счётчик учитывают только записи, видимые вызывающему.
 
 Элемент списка содержит `id`, `action`, `action_label`, `object_type`, `object_type_label`, `object_id`, `object_title`, `object_url`, `actor_id`, `actor_name`, `department_id`, `department_name`, `project_id`, `project_name`, `created_at`, `can_view_details`. При ограничении подробностей `changes`, `metadata` и `operation_id` возвращаются как `null`. Разрешённое изменение передаётся в `changes` как `{поле:{old,new}}`. Пара `null` в изменённом поле может означать, что значения скрыты. У недоступных связанных данных идентификатор, подпись и ссылка могут отсутствовать. Нет членства или недоступна конкретная запись — HTTP 404. У активного участника нет разрешения на журнал — HTTP 403.
+
+## Передача владения
+
+Префикс — `/api/v1/organizations`. Маршруты используют сессию Django и `Cache-Control: no-store`. POST требует `X-CSRFToken`.
+
+| Метод | Маршрут | Запрос и успешный ответ |
+|---|---|---|
+| GET | `/{org_id}/ownership-transfer/` | Только действующий владелец. HTTP 200, `{owner,pending,candidates}`. |
+| POST | `/{org_id}/ownership-transfer/` | Только действующий владелец. `{recipient_id,confirm:true}`, где `recipient_id` — идентификатор членства. HTTP 201, предложение. |
+| POST | `/{org_id}/ownership-transfer/{transfer_id}/revoke/` | Только действующий владелец. HTTP 200, отозванное предложение. |
+| GET | `/ownership-transfers/` | HTTP 200, предложения текущего получателя в организациях с активным членством. |
+| POST | `/ownership-transfers/{transfer_id}/respond/` | Только получатель. `{accept:true}` или `{accept:false}`. HTTP 200, разрешённое предложение. |
+
+Предложение содержит `id`, `organization_id`, `organization_name`, `from_owner`, `recipient`, `status`, `created_at`, `expires_at` и `resolved_at`. Поля участника — `id` (членство) и `username`. Статусы — `pending`, `accepted`, `declined`, `revoked` и `expired`. Срок действия — семь дней. Повторное решение, просроченное предложение и конфликт с действующим предложением дают HTTP 409. Чужое предложение или отсутствующее активное членство скрываются за HTTP 404. Действующему участнику без прав владельца на маршрутах управления возвращается HTTP 403.
+
+Панель организации отображается сервером по `/organizations/{org_id}/` и использует действующие проверки доступа предметных модулей.

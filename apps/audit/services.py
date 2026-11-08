@@ -16,6 +16,7 @@ from .models import AuditEvent
 
 OBJECT_LABELS = {
     "organization": "Организация",
+    "ownership_transfer": "Предложение передачи владения",
     "organization_invitation": "Приглашение в организацию",
     "join_request": "Заявка на вступление",
     "department": "Подразделение",
@@ -40,6 +41,7 @@ ACTION_LABELS = {
     "invited": "Приглашение", "accepted": "Принятие", "declined": "Отклонение",
     "approved": "Утверждение", "rejected": "Отклонение", "cancelled": "Отмена",
     "submitted": "Отправка", "returned": "Возврат", "removed": "Исключение",
+    "offered": "Предложение передачи", "expired": "Истечение срока",
     "issued": "Приглашение", "join_policy_changed": "Изменение правила вступления",
     "member_management_changed": "Изменение полномочий участника",
     "status_changed": "Изменение статуса", "parent_changed": "Перенос подзадачи",

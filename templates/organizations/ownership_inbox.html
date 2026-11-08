@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Предложения о владении — Enactus OS{% endblock %}
+{% block extra_head %}
+    <link rel="stylesheet" href="{% static 'ui/collection.css' %}">
+    <link rel="stylesheet" href="{% static 'organizations/ownership.css' %}">
+    <script type="module" src="{% static 'organizations/ownership.js' %}"></script>
+{% endblock %}
+
+{% block content %}
+    <nav class="breadcrumbs" aria-label="Путь к странице">
+        <a href="{% url 'organization-invitations' %}">Приглашения в организации</a>
+    </nav>
+    <section id="ownership-app" data-ownership-mode="inbox" data-api-url="{{ ownership_inbox_api_url }}" aria-labelledby="ownership-heading">
+        {% csrf_token %}
+        <header class="page-heading collection-header">
+            <div>
+                <h1 id="ownership-heading" tabindex="-1">Предложения о владении</h1>
+                <p class="muted">Здесь можно принять или отклонить предложение стать владельцем организации.</p>
+            </div>
+        </header>
+        <noscript><p>Включите JavaScript, чтобы загрузить предложения.</p></noscript>
+        <p class="muted ownership-message" id="ownership-status" role="status"></p>
+        <p class="form-errors ownership-message" id="ownership-error" role="alert"></p>
+        <button id="ownership-retry" class="button collection-secondary" type="button" hidden>Обновить предложения</button>
+        <ul id="ownership-inbox-list" class="ownership-list" role="list"></ul>
+    </section>
+{% endblock %}
