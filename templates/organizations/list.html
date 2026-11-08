@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Мои организации — Enactus OS{% endblock %}
+{% block extra_head %}
+    {% if can_create_organization %}
+        <script type="module" src="{% static 'organizations/organizations.js' %}"></script>
+    {% endif %}
+{% endblock %}
+
+{% block content %}
+    <header class="page-heading">
+        <p class="eyebrow">Рабочие области</p>
+        <h1>Мои организации</h1>
+        <p>Выберите организацию из списка, чтобы открыть её рабочую область.</p>
+    </header>
+
+    <div class="workspace-grid{% if can_create_organization %} workspace-grid-with-form{% endif %}">
+        <section class="card" aria-labelledby="available-organizations">
+            <div class="card-heading">
+                <h2 id="available-organizations">Доступные организации</h2>
+            </div>
+            {% if organizations %}
+                <table class="data-table" aria-labelledby="available-organizations">
+                    <thead><tr><th scope="col">Название</th><th scope="col">Дата создания</th></tr></thead>
+                    <tbody>
+                        {% for organization in organizations %}
+                            <tr>
+                                <th scope="row">
+                                    <a class="workspace-link" href="{% url 'organization-detail' org_id=organization.id %}">
+                                        <span class="workspace-icon" aria-hidden="true"><svg class="icon"><use href="#icon-org"/></svg></span>
+                                        <span>{{ organization.name }}</span>
+                                    </a>
+                                </th>
+                                <td><time datetime="{{ organization.created_at|date:'c' }}">{{ organization.created_at|date:"j E Y" }}</time></td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            {% else %}
+                <div class="empty-state">
+                    <span class="workspace-icon" aria-hidden="true"><svg class="icon"><use href="#icon-org"/></svg></span>
+                    <p>У вас пока нет доступных организаций.</p>
+                </div>
+            {% endif %}
+        </section>
+
+        {% if can_create_organization %}
+            <section class="card card-padded" aria-labelledby="new-organization">
+                <h2 id="new-organization">Новая организация</h2>
+                <p class="muted">Вы станете её владельцем и участником.</p>
+                <noscript><p>Для создания организации включите JavaScript.</p></noscript>
+                <form id="organization-create" class="form-stack" method="post" action="{{ organization_api_url }}" hidden>
+                    {% csrf_token %}
+                    <div class="form-field">
+                        <label for="organization-name">Название</label>
+                        <input id="organization-name" name="name" type="text" required
+                               aria-describedby="organization-name-hint organization-error">
+                        <p id="organization-name-hint" class="form-hint">От 1 до 200 символов.</p>
+                    </div>
+                    <p id="organization-error" class="form-errors" role="alert"></p>
+                    <button class="button button-primary" type="submit">Создать организацию</button>
+                </form>
+            </section>
+        {% endif %}
+    </div>
+{% endblock %}

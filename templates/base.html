@@ -1,13 +1,58 @@
+{% load static %}
 <!doctype html>
 <html lang="ru">
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>{% block title %}Enactus OS{% endblock %}</title>
+    <script src="{% static 'ui/theme.js' %}"></script>
+    <link rel="stylesheet" href="{% static 'ui/system.css' %}">
+    {% block extra_head %}{% endblock %}
 </head>
 <body>
-    <main>
-        {% block content %}{% endblock %}
-    </main>
+    <a class="skip-link" href="#main-content">К основному содержанию</a>
+    {% include "includes/icons.html" %}
+    {% with route=request.resolver_match.url_name %}
+        {% if request.user.is_authenticated and route != 'login' %}
+            <div class="app-shell">
+                <aside class="sidebar">
+                    <a class="brand" href="{% url 'home' %}">
+                        <span class="brand-mark" aria-hidden="true"><svg class="icon"><use href="#icon-brand"/></svg></span>
+                        <span>Enactus <strong>OS</strong></span>
+                    </a>
+                    <nav class="side-nav" aria-label="Основная навигация">
+                        <p class="side-label">Рабочая область</p>
+                        <a href="{% url 'home' %}"{% if route == 'home' %} class="active" aria-current="page"{% endif %}>
+                            <svg class="icon" aria-hidden="true"><use href="#icon-home"/></svg> Главная
+                        </a>
+                        <a href="{% url 'organization-list' %}"{% if route == 'organization-list' %} class="active" aria-current="page"{% elif route == 'organization-detail' %} class="active" aria-current="location"{% endif %}>
+                            <svg class="icon" aria-hidden="true"><use href="#icon-org"/></svg> Организации
+                        </a>
+                    </nav>
+                    <form method="post" action="{% url 'logout' %}" class="sidebar-footer">
+                        {% csrf_token %}
+                        <button class="side-action" type="submit"><svg class="icon" aria-hidden="true"><use href="#icon-exit"/></svg> Выйти</button>
+                    </form>
+                </aside>
+                <div class="app-content">
+                    <header class="topbar">
+                        <span class="topbar-label">Рабочая область</span>
+                        <div class="topbar-actions">
+                            {% include "includes/theme_control.html" %}
+                            <span class="account">
+                                <span class="avatar" aria-hidden="true">{{ request.user.get_username|slice:":1"|upper }}</span>
+                                <span class="account-name">{{ request.user.get_username }}</span>
+                            </span>
+                        </div>
+                    </header>
+        {% endif %}
+        <main id="main-content" tabindex="-1" class="{% if request.user.is_authenticated and route != 'login' %}page{% else %}public-page{% endif %}">
+            {% block content %}{% endblock %}
+        </main>
+        {% if request.user.is_authenticated and route != 'login' %}
+                </div>
+            </div>
+        {% endif %}
+    {% endwith %}
 </body>
 </html>

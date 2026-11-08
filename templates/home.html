@@ -1,10 +1,21 @@
 {% extends "base.html" %}
 
+{% block title %}Главная — Enactus OS{% endblock %}
 {% block content %}
-    <h1>Enactus OS</h1>
-    <p>Вы вошли как {{ request.user.get_username }}.</p>
-    <form method="post" action="{% url 'logout' %}">
-        {% csrf_token %}
-        <button type="submit">Выйти</button>
-    </form>
+    <header class="page-heading">
+        <p class="eyebrow">Обзор платформы</p>
+        <h1>Главная</h1>
+        <p>Выберите организацию, чтобы открыть её рабочую область.</p>
+    </header>
+
+    <section class="card feature-card" aria-labelledby="workspace-heading">
+        <div class="feature-content">
+            <span class="feature-icon" aria-hidden="true"><svg class="icon"><use href="#icon-org"/></svg></span>
+            <h2 id="workspace-heading">Мои организации</h2>
+            <p>Откройте список организаций, в которых вы состоите.</p>
+            <a class="button button-primary" href="{% url 'organization-list' %}">
+                Открыть организации <svg class="icon" aria-hidden="true"><use href="#icon-arrow"/></svg>
+            </a>
+        </div>
+    </section>
 {% endblock %}

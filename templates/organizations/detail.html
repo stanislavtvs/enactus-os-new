@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+
+{% block title %}{{ organization.name }} — Enactus OS{% endblock %}
+{% block content %}
+    <nav class="breadcrumbs" aria-label="Путь к странице">
+        <a href="{% url 'organization-list' %}">Мои организации</a>
+    </nav>
+    <header class="page-heading">
+        <p class="eyebrow">Рабочая область</p>
+        <h1>{{ organization.name }}</h1>
+    </header>
+
+    <section class="card card-padded" aria-labelledby="organization-info">
+        <h2 id="organization-info">Об организации</h2>
+        <dl class="facts">
+            <dt>Дата создания</dt>
+            <dd><time datetime="{{ organization.created_at|date:'c' }}">{{ organization.created_at|date:"j E Y" }}</time></dd>
+        </dl>
+    </section>
+{% endblock %}

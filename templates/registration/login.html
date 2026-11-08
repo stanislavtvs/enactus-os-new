@@ -2,11 +2,40 @@
 
 {% block title %}Вход — Enactus OS{% endblock %}
 {% block content %}
-    <h1>Вход в Enactus OS</h1>
-    <form method="post">
-        {% csrf_token %}
-        {{ form.as_p }}
-        <input type="hidden" name="next" value="{{ next }}">
-        <button type="submit">Войти</button>
-    </form>
+    <div class="login-layout">
+        <div class="login-brand">
+            <div class="brand">
+                <span class="brand-mark" aria-hidden="true"><svg class="icon"><use href="#icon-brand"/></svg></span>
+                <span>Enactus <strong>OS</strong></span>
+            </div>
+            <div class="login-brand-copy">
+                <p class="eyebrow">Enactus OS</p>
+                <p class="login-statement">Рабочее пространство для вашей команды</p>
+                <p>Ваши организации доступны через одну учётную запись.</p>
+            </div>
+        </div>
+        <div class="login-main">
+            <div class="login-tools">{% include "includes/theme_control.html" %}</div>
+            <section class="login-card" aria-labelledby="login-heading">
+                <p class="eyebrow">Учётная запись</p>
+                <h1 id="login-heading">Вход в Enactus OS</h1>
+                <p class="muted">Введите имя пользователя и пароль.</p>
+                <form method="post" class="form-stack">
+                    {% csrf_token %}
+                    {% if form.non_field_errors %}
+                        <div class="form-errors" role="alert">{{ form.non_field_errors }}</div>
+                    {% endif %}
+                    {% for field in form.visible_fields %}
+                        <div class="form-field">
+                            {{ field.label_tag }}
+                            {{ field }}
+                            {% if field.errors %}<div class="form-errors" role="alert">{{ field.errors }}</div>{% endif %}
+                        </div>
+                    {% endfor %}
+                    <input type="hidden" name="next" value="{{ next }}">
+                    <button class="button button-primary" type="submit">Войти <svg class="icon" aria-hidden="true"><use href="#icon-arrow"/></svg></button>
+                </form>
+            </section>
+        </div>
+    </div>
 {% endblock %}
