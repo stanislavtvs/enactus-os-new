@@ -4,10 +4,11 @@ from ninja import PatchDict, Query, Router
 from ninja.errors import HttpError
 from ninja.security import django_auth
 
+from apps.access.policy import Permission
 from apps.access.services import organization_access
 from apps.projects.services import visible_project
 
-from . import decomposition, dependencies, distribution, reviews, services
+from . import decomposition, dependencies, distribution, priorities, reviews, services, statuses
 from .models import Task
 from .schemas import (
     AssigneeInput,
@@ -38,7 +39,21 @@ from .schemas import (
     TaskListQuery,
     TaskOptions,
     TaskOutput,
+    TaskPriorityChangeInput,
+    TaskPriorityInput,
+    TaskPriorityListOutput,
+    TaskPriorityOutput,
     TaskReviewPolicyInput,
+    TaskStatusChangeInput,
+    TaskStatusInput,
+    TaskStatusListOutput,
+    TaskStatusOutput,
+    TaskTransitionChangeInput,
+    TaskTransitionInput,
+    TaskTransitionListOutput,
+    TaskTransitionOutput,
+    TaskWorkflowStatusInput,
+    TaskWorkflowStatusOutput,
     WorkflowOutput,
 )
 
@@ -61,6 +76,19 @@ TASK_CONFLICT_CONSTRAINTS = {
     "unique_task_dependency_pair",
     "task_dependency_graph_no_cycle",
     "task_strict_dependencies_block_start",
+    "unique_task_priority_code",
+    "unique_task_priority_default",
+    "task_priority_level_active",
+    "task_priority_archive_unused_only",
+    "task_priority_active_default_required",
+    "unique_task_status_code",
+    "unique_task_status_stage_default",
+    "unique_task_status_transition_pair",
+    "task_status_transition_is_not_self",
+    "task_workflow_status_active",
+    "task_workflow_status_default_required",
+    "task_workflow_stage_default_required",
+    "task_transition_manual_stage_pair",
 }
 
 
@@ -69,9 +97,9 @@ def _perform(operation, **kwargs):
         return operation(**kwargs)
     except PermissionDenied:
         raise HttpError(403, "Forbidden") from None
-    except services.TaskConflict as exc:
+    except (services.TaskConflict, priorities.PriorityConflict, statuses.StatusConflict) as exc:
         raise HttpError(409, str(exc)) from None
-    except services.TaskValidation as exc:
+    except (services.TaskValidation, priorities.PriorityValidation, statuses.StatusValidation) as exc:
         raise HttpError(422, str(exc)) from None
     except IntegrityError as exc:
         constraint = getattr(getattr(exc.__cause__, "diag", None), "constraint_name", None)
@@ -88,12 +116,15 @@ def _task_data(task, access, parents=None):
     if parents is None:
         parents = services.visible_parent_names(access, [task])
     parent_id = task.parent_id if task.parent_id in parents else None
+    workflow_choices = services.allowed_workflow_statuses(access=access, task=task)
     return {
         "id": task.pk,
         "name": task.name,
         "description": task.description,
         "status": task.status,
         "priority": task.priority,
+        "priority_level": priorities.priority_for_output(access, task),
+        "workflow_status": statuses.task_workflow_status(access, task),
         "planned_start_at": task.planned_start_at,
         "due_at": task.due_at,
         "completed_at": task.completed_at,
@@ -113,7 +144,10 @@ def _task_data(task, access, parents=None):
         "has_blocking_dependencies": services.has_blocking_dependencies(task),
         "has_dependency_warnings": services.has_dependency_warnings(task),
         "permissions": services.task_permissions(access=access, task=task),
-        "allowed_statuses": services.allowed_statuses(access=access, task=task),
+        "allowed_statuses": services.allowed_statuses(
+            access=access, task=task, workflow_choices=workflow_choices,
+        ),
+        "allowed_workflow_statuses": workflow_choices,
     }
 
 
@@ -372,6 +406,7 @@ def list_subtasks(request, org_id: RecordId, task_id: RecordId, filters: Query[H
         "items": [
             {
                 "id": task.pk, "name": task.name, "status": task.status,
+                "workflow_status": statuses.task_workflow_status(access, task),
                 "parent_id": task.parent_id if task.parent_id in parents else None,
                 "assignee": _member_data(task.assignee), "due_at": task.due_at,
                 "is_archived": task.is_archived,
@@ -584,4 +619,111 @@ def add_task_dependency(request, org_id: RecordId, task_id: RecordId, payload: D
 def remove_task_dependency(request, org_id: RecordId, task_id: RecordId, dependency_id: RecordId):
     return _workflow_command(
         request, org_id, dependencies.remove_dependency, task_id=task_id, dependency_id=dependency_id,
+    )
+
+
+@router.get("/{org_id}/task-priorities/", response=TaskPriorityListOutput, url_name="task_priority_list")
+def list_task_priorities(request, org_id: RecordId):
+    can_manage, items = _perform(priorities.list_priorities, user=request.user, org_id=org_id)
+    return {"can_manage": can_manage, "items": items}
+
+
+@router.post("/{org_id}/task-priorities/", response={201: TaskPriorityOutput})
+def create_task_priority(request, org_id: RecordId, payload: TaskPriorityInput):
+    return 201, _perform(
+        priorities.create_priority, user=request.user, org_id=org_id, **payload.model_dump(),
+    )
+
+
+@router.patch("/{org_id}/task-priorities/{priority_id}/", response=TaskPriorityOutput)
+def update_task_priority(
+    request, org_id: RecordId, priority_id: RecordId, payload: PatchDict[TaskPriorityChangeInput],
+):
+    return _perform(
+        priorities.update_priority, user=request.user, org_id=org_id,
+        priority_id=priority_id, changes=payload,
+    )
+
+
+@router.delete("/{org_id}/task-priorities/{priority_id}/", response={204: None})
+def archive_task_priority(request, org_id: RecordId, priority_id: RecordId):
+    return _workflow_command(
+        request, org_id, priorities.archive_priority, priority_id=priority_id,
+    )
+
+
+@router.get("/{org_id}/task-statuses/", response=TaskStatusListOutput, url_name="task_status_list")
+def list_task_statuses(request, org_id: RecordId):
+    can_manage, items = _perform(statuses.list_statuses, user=request.user, org_id=org_id)
+    return {"can_manage": can_manage, "items": items}
+
+
+@router.post("/{org_id}/task-statuses/", response={201: TaskStatusOutput})
+def create_task_status(request, org_id: RecordId, payload: TaskStatusInput):
+    return 201, _perform(
+        statuses.create_status, user=request.user, org_id=org_id, **payload.model_dump(),
+    )
+
+
+@router.patch("/{org_id}/task-statuses/{status_id}/", response=TaskStatusOutput)
+def update_task_status(
+    request, org_id: RecordId, status_id: RecordId, payload: PatchDict[TaskStatusChangeInput],
+):
+    return _perform(
+        statuses.update_status, user=request.user, org_id=org_id, status_id=status_id, changes=payload,
+    )
+
+
+@router.delete("/{org_id}/task-statuses/{status_id}/", response={204: None})
+def archive_task_status(request, org_id: RecordId, status_id: RecordId):
+    return _workflow_command(
+        request, org_id, statuses.archive_status, status_id=status_id,
+    )
+
+
+@router.get("/{org_id}/task-transitions/", response=TaskTransitionListOutput)
+def list_task_transitions(request, org_id: RecordId):
+    can_manage, items = _perform(statuses.list_transitions, user=request.user, org_id=org_id)
+    return {
+        "can_manage": can_manage,
+        "items": items,
+        "permission_options": [{"code": permission, "label": permission.label} for permission in Permission],
+        "stage_targets": {
+            stage: [stage, *statuses.MANUAL_STAGE_TRANSITIONS.get(stage, ())]
+            for stage in Task.Status
+        },
+    }
+
+
+@router.post("/{org_id}/task-transitions/", response={201: TaskTransitionOutput})
+def create_task_transition(request, org_id: RecordId, payload: TaskTransitionInput):
+    return 201, _perform(
+        statuses.create_transition, user=request.user, org_id=org_id, **payload.model_dump(),
+    )
+
+
+@router.patch("/{org_id}/task-transitions/{transition_id}/", response=TaskTransitionOutput)
+def update_task_transition(
+    request, org_id: RecordId, transition_id: RecordId, payload: PatchDict[TaskTransitionChangeInput],
+):
+    return _perform(
+        statuses.update_transition, user=request.user, org_id=org_id,
+        transition_id=transition_id, changes=payload,
+    )
+
+
+@router.get("/{org_id}/tasks/{task_id}/workflow-status/", response=TaskWorkflowStatusOutput)
+def get_task_workflow_status(request, org_id: RecordId, task_id: RecordId):
+    access = organization_access(user=request.user, org_id=org_id)
+    task = services.visible_task(access=access, task_id=task_id)
+    return {
+        "current": statuses.task_workflow_status(access, task),
+        "allowed_workflow_statuses": services.allowed_workflow_statuses(access=access, task=task),
+    }
+
+
+@router.put("/{org_id}/tasks/{task_id}/workflow-status/", response=TaskOutput)
+def set_task_workflow_status(request, org_id: RecordId, task_id: RecordId, payload: TaskWorkflowStatusInput):
+    return _changed_task(
+        request, org_id, services.set_workflow_status, task_id=task_id, **payload.model_dump(),
     )

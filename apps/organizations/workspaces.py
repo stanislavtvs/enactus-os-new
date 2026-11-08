@@ -4,6 +4,7 @@ from apps.access.policy import Access, Permission
 from apps.projects.services import can_open_projects
 from apps.projects.staffing import can_open_staffing
 from apps.tasks.distribution import can_open_distribution
+from apps.tasks.priorities import can_view_configuration
 from apps.tasks.reviews import can_open_review_inbox
 from apps.tasks.services import can_open_tasks
 
@@ -25,6 +26,7 @@ SCOPED_ROUTES = {
     "organization-my-tasks",
     "organization-task-distribution",
     "organization-task-reviews",
+    "organization-task-configuration",
     "organization-task",
     "project-tasks",
     "organization-staffing",
@@ -47,6 +49,7 @@ PAGE_TITLES = {
     "organization-my-tasks": "Мои задачи",
     "organization-task-distribution": "Распределение задач",
     "organization-task-reviews": "Проверка задач",
+    "organization-task-configuration": "Рабочие процессы",
     "organization-task": "Задача",
     "project-tasks": "Задачи проекта",
     "organization-staffing": "Запросы сотрудников",
@@ -113,6 +116,7 @@ def _workspace_links(request, workspace, route):
         ("organization-my-tasks", "Мои задачи", "user", True, ()),
         ("organization-task-distribution", "Распределение задач", "arrow", can_open_distribution(access), ()),
         ("organization-task-reviews", "Проверка задач", "invite", can_open_review_inbox(access), ()),
+        ("organization-task-configuration", "Рабочие процессы", "settings", can_view_configuration(access), ()),
         ("organization-access", "Роли и доступ", "org", True, ()),
         (
             "organization-manage", "Приглашения и заявки", "invite",

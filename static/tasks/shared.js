@@ -1,3 +1,6 @@
+import {element} from "../departments/directory.js";
+import {selectOptions} from "../projects/shared.js";
+
 export {element, errorMessage, request} from "../departments/directory.js";
 export {selectOptions} from "../projects/shared.js";
 
@@ -10,6 +13,34 @@ export const statuses = {
 };
 
 export const priorities = {low: "Низкий", normal: "Обычный", high: "Высокий"};
+
+function catalogChip(item, className, fallback) {
+    const chip = element("span", className, item?.name ?? fallback);
+    if (/^#[0-9a-f]{6}$/i.test(item?.color ?? "")) {
+        chip.style.setProperty("--task-catalog-color", item.color);
+    }
+    return chip;
+}
+
+export function priorityChip(priority, fallback = "Приоритет не указан") {
+    return catalogChip(priority, "task-priority-chip", fallback);
+}
+
+export function workflowStatusChip(status, fallback = "Статус не указан") {
+    return catalogChip(status, "task-workflow-status-chip", fallback);
+}
+
+export function setupPrioritySelect(select, items, current = null) {
+    const active = items.filter(({is_active}) => is_active);
+    const choices = active.map(({id, name}) => [id, name]);
+    if (current && !active.some(({id}) => id === current.id)) {
+        choices.unshift([current.id, `${current.name} (текущий)`]);
+    }
+    const defaultId = active.find(({is_default}) => is_default)?.id;
+    selectOptions(select, "По умолчанию", choices, current?.id ?? defaultId);
+    select.options[0].disabled = choices.length > 0;
+    select.required = choices.length > 0;
+}
 
 const displayTime = new Intl.DateTimeFormat("ru", {dateStyle: "medium", timeStyle: "short"});
 const upcomingWindow = 7 * 24 * 60 * 60 * 1000;
@@ -36,7 +67,11 @@ export function readTaskFields(form, existing = null) {
         field("name").focus();
         throw new Error("Введите название длиной от 1 до 200 символов.");
     }
-    const payload = {name, description: field("description").value, priority: field("priority").value};
+    const payload = {name, description: field("description").value};
+    const priorityId = field("priority_id")?.value;
+    if (priorityId && priorityId !== String(existing?.priority_level?.id ?? "")) {
+        payload.priority_id = Number(priorityId);
+    }
     for (const key of ["planned_start_at", "due_at"]) {
         const input = field(key);
         if (existing && input.value === input.dataset.originalValue) {

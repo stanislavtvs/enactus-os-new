@@ -1,4 +1,4 @@
-import {dateLabel, deadlineState, element, errorMessage, localValue, priorities, readTaskFields, request, selectOptions, statuses} from "./shared.js";
+import {dateLabel, deadlineState, element, errorMessage, localValue, priorities, priorityChip, readTaskFields, request, selectOptions, setupPrioritySelect, statuses, workflowStatusChip} from "./shared.js";
 import {taskWorkflow} from "./workflow.js";
 import {taskDecomposition} from "./decomposition.js";
 import {taskDependencies} from "./dependencies.js";
@@ -66,8 +66,9 @@ function renderInfo() {
     const deadline = deadlineState(task);
     const due = dateLabel(task.due_at);
     const data = [
-        ["Статус", `${statuses[task.status] ?? task.status}${task.is_archived ? " · Архив" : ""}`],
-        ["Приоритет", priorities[task.priority] ?? task.priority],
+        ["Статус", workflowStatusChip(task.workflow_status, statuses[task.status] ?? task.status)],
+        ["Системный этап", `${statuses[task.status] ?? task.status}${task.is_archived ? " · Архив" : ""}`],
+        ["Приоритет", priorityChip(task.priority_level, priorities[task.priority] ?? task.priority)],
         ["Автор", task.author.username],
         ["Проект", task.project?.name ?? "Без проекта"],
         ["Подразделение", task.department?.name ?? "Не указано"],
@@ -78,13 +79,35 @@ function renderInfo() {
     facts.replaceChildren();
     for (const [label, value] of data) {
         const group = element("div", "");
-        group.append(element("dt", "", label), element("dd", "", value));
+        const definition = element("dd", "");
+        definition.append(value);
+        group.append(element("dt", "", label), definition);
         facts.append(group);
     }
     document.querySelector("#task-info-description").textContent = task.description;
-    const transitions = task.allowed_statuses.filter((choice) => choice !== task.status);
-    statusForm.hidden = !task.permissions.change_status || !transitions.length;
-    selectOptions(statusSelect, "Выберите статус", transitions.map((code) => [code, statuses[code] ?? code]));
+    const custom = Boolean(task.workflow_status);
+    const transitions = custom
+        ? task.allowed_workflow_statuses.map((item) => [item.id, `${item.name} · ${statuses[item.stage] ?? item.stage}`])
+        : task.allowed_statuses.filter((choice) => choice !== task.status).map((code) => [code, statuses[code] ?? code]);
+    statusForm.hidden = !transitions.length || (!custom && !task.permissions.change_status);
+    selectOptions(statusSelect, "Выберите статус", transitions);
+    const reasons = [];
+    if (!task.is_archived && !["completed", "cancelled"].includes(task.status)) {
+        if (task.has_blocking_dependencies) {
+            reasons.push("Начать работу нельзя, пока не завершены строгие предшественники.");
+        }
+        if (task.status === "review") {
+            reasons.push("Результат принимают на текущем этапе согласования.");
+        } else if (task.status === "in_progress") {
+            reasons.push("Для проверки или завершения отправьте результат на согласование.");
+        } else if (!task.assignee && !task.distribution_pending) {
+            reasons.push("Для начала работы нужен основной исполнитель.");
+        }
+        if (!transitions.length && !reasons.length) {
+            reasons.push("Нет доступных ручных переходов для этой задачи.");
+        }
+    }
+    document.querySelector("#task-status-reason").textContent = reasons.join(" ");
     archive.hidden = !task.permissions.archive;
     info.hidden = false;
 }
@@ -123,9 +146,10 @@ function renderPeople(canAssign = false, assignees = []) {
 }
 
 function setupEdit(options) {
-    for (const field of ["name", "description", "priority"]) {
+    for (const field of ["name", "description"]) {
         editForm.elements.namedItem(field).value = task[field];
     }
+    setupPrioritySelect(editForm.elements.namedItem("priority_id"), options.priorities, task.priority_level);
     for (const field of ["planned_start_at", "due_at"]) {
         const input = editForm.elements.namedItem(field);
         input.value = localValue(task[field]);
@@ -248,6 +272,12 @@ collaboratorForm.addEventListener("submit", (event) => {
 });
 statusForm.addEventListener("submit", (event) => {
     event.preventDefault();
+    if (task.workflow_status) {
+        return mutate("workflow-status/", "PUT", {
+            status_id: Number(statusSelect.value),
+            expected_status_id: task.workflow_status.id,
+        }, "Статус изменён.");
+    }
     return mutate("status/", "PUT", {status: statusSelect.value}, "Статус изменён.");
 });
 archive.addEventListener("click", () => {

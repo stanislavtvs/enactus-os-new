@@ -8,6 +8,7 @@ from apps.access.services import organization_access
 from apps.projects.services import visible_project
 
 from .distribution import can_open_distribution
+from .priorities import can_view_configuration
 from .reviews import can_open_review_inbox, visible_workflow_task
 from .services import can_open_project_tasks, can_open_tasks
 
@@ -66,3 +67,12 @@ def organization_task_queue(request, org_id, queue):
     if not can_open(access):
         raise Http404
     return render(request, "tasks/list.html", {**_context(access), "mine": False, "queue": queue})
+
+
+@login_required
+@require_GET
+def organization_task_configuration(request, org_id):
+    access = organization_access(user=request.user, org_id=org_id)
+    if not can_view_configuration(access):
+        raise Http404
+    return render(request, "tasks/configuration.html", _context(access))

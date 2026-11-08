@@ -38,12 +38,19 @@ class Permission(models.TextChoices):
     TASKS_REVIEW_APPROVE = "tasks.review.approve", "Принимать результат задачи"
     TASKS_REVIEW_RETURN = "tasks.review.return", "Возвращать задачу на доработку"
     TASKS_REVIEW_MANAGE = "tasks.review.manage", "Управлять правилами проверки задач"
+    TASKS_WORKFLOW_VIEW = "tasks.workflow.view", "Просматривать настройки рабочих процессов"
+    TASKS_PRIORITIES_MANAGE = "tasks.priorities.manage", "Управлять приоритетами задач"
+    TASKS_STATUSES_MANAGE = "tasks.statuses.manage", "Управлять пользовательскими статусами задач"
+    TASKS_TRANSITIONS_MANAGE = "tasks.transitions.manage", "Управлять переходами задач"
+    TASKS_STATUS_EXECUTE = "tasks.status.execute", "Менять статус назначенной задачи по доступному переходу"
     ROLES_READ = "roles.read", "Просматривать роли"
     ROLES_MANAGE = "roles.manage", "Управлять ролями"
 
 
 ORGANIZATION_ONLY = frozenset({
     Permission.ORGANIZATIONS_ONBOARDING_MANAGE, Permission.ROLES_READ, Permission.ROLES_MANAGE,
+    Permission.TASKS_WORKFLOW_VIEW, Permission.TASKS_PRIORITIES_MANAGE,
+    Permission.TASKS_STATUSES_MANAGE, Permission.TASKS_TRANSITIONS_MANAGE,
 })
 LEGACY_MEMBER_MANAGER = frozenset({
     Permission.DEPARTMENTS_CREATE,

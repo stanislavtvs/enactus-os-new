@@ -58,7 +58,9 @@ def _visible_parent(access, task):
 def _reverse_conflict(task, parent):
     if (
         task.status != Task.Status.PENDING or task.assignee_id is not None
+        or (task.workflow_status_id is not None and task.workflow_status.code != Task.Status.PENDING)
         or task.description or task.priority != Task.Priority.NORMAL
+        or (task.priority_level_id is not None and task.priority_level.code != Task.Priority.NORMAL)
         or task.planned_start_at is not None or task.due_at is not None
         or task.review_policy is not None or task.reviewer_id is not None
         or (task.project_id, task.department_id) != (parent.project_id, parent.department_id)

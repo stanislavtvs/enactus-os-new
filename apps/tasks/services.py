@@ -1,6 +1,7 @@
 from django.core.exceptions import PermissionDenied
 from django.db import transaction
-from django.db.models import Exists, OuterRef, Prefetch, Q
+from django.db.models import Case, Exists, OuterRef, Prefetch, Q, Subquery, Value, When
+from django.db.models.functions import Coalesce
 from django.http import Http404
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
@@ -12,20 +13,15 @@ from apps.projects.services import _can_view as can_view_project
 from apps.projects.services import _context as project_context
 from apps.projects.services import visible_projects
 
+from . import priorities, statuses
 from .models import Task, TaskCollaborator, TaskDependency, TaskDistribution
 
 VIEW = "tasks.view"
 CREATE = "tasks.create"
 UPDATE = "tasks.update"
 ASSIGN = "tasks.assign"
-CHANGE_STATUS = "tasks.change_status"
 ARCHIVE = "tasks.archive"
 
-TRANSITIONS = {
-    Task.Status.PENDING: (Task.Status.IN_PROGRESS, Task.Status.CANCELLED),
-    Task.Status.IN_PROGRESS: (Task.Status.CANCELLED,),
-    Task.Status.REVIEW: (Task.Status.CANCELLED,),
-}
 REQUIRES_ASSIGNEE = {Task.Status.IN_PROGRESS, Task.Status.REVIEW, Task.Status.COMPLETED}
 TERMINAL_STATUSES = {Task.Status.COMPLETED, Task.Status.CANCELLED}
 INHERIT_SCOPE = object()
@@ -80,6 +76,7 @@ def _task_rows(access, *, lock=False):
     rows = organization.tasks.select_related(
         "created_by__user", "assignee__user", "department", "project__responsible_department",
         "reviewer__user", "organization",
+        "priority_level", "workflow_status",
     ).annotate(
         _my_collaboration=Exists(TaskCollaborator.objects.filter(
             organization=organization, task_id=OuterRef("pk"),
@@ -162,6 +159,7 @@ def _task_access_filter(access, rows):
 def list_tasks(
     *, access, q="", status=None, project_id=None, department_id=None, mine=False,
     include_archived=False, distribution_pending=None, queue_task_ids=None, page=1, page_size=20,
+    priority_id=None, workflow_status_id=None, sort=None,
 ):
     rows = (
         _visible_rows(access) if queue_task_ids is None
@@ -179,11 +177,45 @@ def list_tasks(
         rows = rows.filter(department_id=department_id)
     if distribution_pending is not None:
         rows = rows.filter(_distribution_pending=distribution_pending)
+    if priority_id is not None:
+        legacy_code = access.organization.task_priorities.filter(
+            pk=priority_id, code__in=priorities.LEGACY_PRIORITIES,
+        ).values("code")[:1]
+        rows = rows.filter(
+            Q(priority_level_id=priority_id)
+            | Q(priority_level_id__isnull=True, priority=Subquery(legacy_code)),
+        )
+    if workflow_status_id is not None:
+        fallback_stage = access.organization.task_statuses.filter(
+            pk=workflow_status_id, is_default=True, is_active=True,
+        ).values("stage")[:1]
+        rows = rows.filter(
+            Q(workflow_status_id=workflow_status_id)
+            | Q(workflow_status__isnull=True, status=Subquery(fallback_stage)),
+        )
     if mine:
         member_id = access.membership.pk
         rows = rows.filter(Q(assignee_id=member_id) | Q(_my_collaboration=True))
+    ordering = ("-id",)
+    if sort == "priority":
+        legacy_rank = access.organization.task_priorities.filter(
+            code=OuterRef("priority"),
+        ).values("rank")[:1]
+        rows = rows.annotate(_priority_rank=Coalesce(
+            "priority_level__rank", Subquery(legacy_rank),
+            Case(When(priority="high", then=Value(300)), When(priority="low", then=Value(100)), default=Value(200)),
+        ))
+        ordering = ("-_priority_rank", "-id")
+    elif sort == "status":
+        default_order = access.organization.task_statuses.filter(
+            stage=OuterRef("status"), is_default=True, is_active=True,
+        ).values("sort_order")[:1]
+        rows = rows.annotate(_status_order=Coalesce(
+            "workflow_status__sort_order", Subquery(default_order), Value(0),
+        ))
+        ordering = ("_status_order", "-id")
     offset = (page - 1) * page_size
-    return rows.order_by("-id")[offset:offset + page_size], rows.count()
+    return rows.order_by(*ordering)[offset:offset + page_size], rows.count()
 
 
 def can_open_tasks(access):
@@ -246,7 +278,7 @@ def task_permissions(*, access, task):
         "update": writable and access.allows(UPDATE, context),
         "assign": writable and _can_assign(access, task),
         "archive": writable and access.allows(ARCHIVE, context),
-        "change_status": writable and access.allows(CHANGE_STATUS, context),
+        "change_status": writable and statuses.can_attempt_transition(access, task, context),
     }
 
 
@@ -279,18 +311,39 @@ def require_no_blocking_dependencies(task):
         raise TaskConflict("Сначала завершите блокирующие предшествующие задачи.")
 
 
-def allowed_statuses(*, access, task):
-    if (
-        not _task_is_writable(task) or not _task_visible(access, task)
-        or not access.allows(CHANGE_STATUS, _context(task.project, task.department))
-    ):
+def allowed_workflow_statuses(*, access, task):
+    if not _task_is_writable(task) or not _task_visible(access, task):
         return []
-    choices = TRANSITIONS.get(task.status, ())
-    if has_blocking_dependencies(task):
-        choices = tuple(status for status in choices if status != Task.Status.IN_PROGRESS)
-    if not choices or _assignee_is_active(task):
-        return list(choices)
-    return [status for status in choices if status not in REQUIRES_ASSIGNEE]
+    context = _context(task.project, task.department)
+    if not statuses.can_attempt_transition(access, task, context):
+        return []
+    source = statuses.task_workflow_status(access, task)
+    if source is None:
+        return []
+    return [
+        rule.to_status
+        for rule in statuses.transition_rules(access, source.pk)
+        if statuses.can_execute_rule(access, task, context, rule)
+        and _manual_stage_conflict(task, rule.to_status.stage) is None
+    ]
+
+
+def allowed_statuses(*, access, task, workflow_choices=None):
+    if workflow_choices is None:
+        workflow_choices = allowed_workflow_statuses(access=access, task=task)
+    return [status.stage for status in workflow_choices if status.is_default and status.stage != task.status]
+
+
+def _manual_stage_conflict(task, target_stage):
+    if target_stage == task.status:
+        return None
+    if not statuses.stage_transition_allowed(task.status, target_stage):
+        return "Такой переход системного этапа недоступен."
+    if target_stage == Task.Status.IN_PROGRESS and has_blocking_dependencies(task):
+        return "Сначала завершите блокирующие предшествующие задачи."
+    if target_stage in REQUIRES_ASSIGNEE and not _assignee_is_active(task):
+        return "Сначала назначьте основного исполнителя."
+    return None
 
 
 def task_options(*, access, task_id=None):
@@ -306,6 +359,8 @@ def task_options(*, access, task_id=None):
         ]
     return {
         "assignment_mode": access.organization.task_assignment_mode,
+        "priorities": priorities.available_priorities(access.organization),
+        "statuses": statuses.available_statuses(access.organization),
         "current_membership_id": access.membership.pk,
         "can_create_standalone": _can_create(access, None, None),
         "can_clear_department": can_update and access.allows(UPDATE, _context(task.project, None)),
@@ -352,7 +407,7 @@ def _managed_task(user, org_id, task_id, action, *, allow_archived=False):
     task = get_object_or_404(_task_rows(access, lock=True), pk=task_id)
     if not _task_visible(access, task):
         raise Http404
-    if not access.allows(action, _context(task.project, task.department)):
+    if action is not None and not access.allows(action, _context(task.project, task.department)):
         raise PermissionDenied
     if not (allow_archived and task.is_archived) and not _task_is_writable(task):
         raise TaskConflict("Архивную задачу или задачу архивного проекта нельзя изменить.")
@@ -361,7 +416,7 @@ def _managed_task(user, org_id, task_id, action, *, allow_archived=False):
 
 @transaction.atomic
 def create_task(
-    *, user, org_id, name, description="", priority=Task.Priority.NORMAL,
+    *, user, org_id, name, description="", priority=priorities.UNSET, priority_id=priorities.UNSET,
     project_id=INHERIT_SCOPE, department_id=INHERIT_SCOPE, parent_id=None,
     planned_start_at=None, due_at=None,
 ):
@@ -386,9 +441,14 @@ def create_task(
     if not _can_create(access, project, department):
         raise PermissionDenied
     _validate_dates(planned_start_at, due_at)
+    level = priorities.resolve_task_priority(access.organization, priority=priority, priority_id=priority_id)
+    initial_status = statuses.default_statuses(access).get(Task.Status.PENDING)
+    if initial_status is None:
+        raise TaskConflict("Для начального этапа нет действующего статуса по умолчанию.")
     return access.organization.tasks.create(
-        name=name, description=description, priority=priority, project=project,
-        department=department, parent=parent, created_by=access.membership,
+        name=name, description=description, priority=priorities.legacy_priority_code(level),
+        priority_level=level, project=project,
+        department=department, parent=parent, created_by=access.membership, workflow_status=initial_status,
         planned_start_at=planned_start_at, due_at=due_at,
     )
 
@@ -449,7 +509,15 @@ def update_task(*, user, org_id, task_id, changes):
         task.department = department
         fields.append("department")
     _validate_dates(changes.get("planned_start_at", task.planned_start_at), changes.get("due_at", task.due_at))
-    for field in ("name", "description", "priority", "planned_start_at", "due_at"):
+    if "priority" in changes or "priority_id" in changes:
+        level = priorities.resolve_task_priority(
+            access.organization, priority=changes.get("priority", priorities.UNSET),
+            priority_id=changes.get("priority_id", priorities.UNSET),
+        )
+        task.priority_level = level
+        task.priority = priorities.legacy_priority_code(level)
+        fields.extend(["priority_level", "priority"])
+    for field in ("name", "description", "planned_start_at", "due_at"):
         if field in changes:
             setattr(task, field, changes[field])
             fields.append(field)
@@ -537,19 +605,56 @@ def set_collaborator(*, user, org_id, task_id, membership_id, include):
 
 @transaction.atomic
 def set_status(*, user, org_id, task_id, status):
-    access, task = _managed_task(user, org_id, task_id, CHANGE_STATUS)
+    access, task = _managed_task(user, org_id, task_id, None)
+    if not statuses.can_attempt_transition(access, task, _context(task.project, task.department)):
+        raise PermissionDenied
     if status == task.status:
         return task
-    if status not in TRANSITIONS.get(task.status, ()):
-        raise TaskConflict("Такой переход статуса недоступен.")
-    if status == Task.Status.IN_PROGRESS:
-        require_no_blocking_dependencies(task)
-    if status in REQUIRES_ASSIGNEE and not _assignee_is_active(task):
-        raise TaskConflict("Сначала назначьте основного исполнителя.")
-    task.status = status
-    task.completed_at = timezone.now() if status == Task.Status.COMPLETED else None
-    task.save(update_fields=["status", "completed_at", "updated_at"])
-    if status == Task.Status.CANCELLED:
+    target = statuses.default_statuses(access).get(status)
+    if target is None:
+        raise TaskConflict("У целевого этапа нет действующего статуса по умолчанию.")
+    return _set_workflow_status(access, task, target)
+
+
+@transaction.atomic
+def set_workflow_status(*, user, org_id, task_id, status_id, expected_status_id):
+    access, task = _managed_task(user, org_id, task_id, None)
+    context = _context(task.project, task.department)
+    if not statuses.can_attempt_transition(access, task, context):
+        raise PermissionDenied
+    source = statuses.task_workflow_status(access, task)
+    if source is None or source.pk != expected_status_id:
+        raise TaskConflict("Статус задачи изменился. Обновите карточку и повторите действие.")
+    target = get_object_or_404(access.organization.task_statuses, pk=status_id)
+    return _set_workflow_status(access, task, target)
+
+
+def _set_workflow_status(access, task, target):
+    context = _context(task.project, task.department)
+    if not statuses.can_attempt_transition(access, task, context):
+        raise PermissionDenied
+    source = statuses.task_workflow_status(access, task)
+    if source is None:
+        raise TaskConflict("Для текущего этапа нет статуса.")
+    if not target.is_active:
+        raise TaskConflict("Архивный статус нельзя выбрать.")
+    if source.pk == target.pk:
+        return task
+
+    rule = next((rule for rule in statuses.transition_rules(access, source.pk) if rule.to_status_id == target.pk), None)
+    if rule is None:
+        raise TaskConflict("Такой переход статуса не разрешён настройками организации.")
+    if not statuses.can_execute_rule(access, task, context, rule):
+        raise PermissionDenied
+    conflict = _manual_stage_conflict(task, target.stage)
+    if conflict is not None:
+        raise TaskConflict(conflict)
+
+    previous_stage = task.status
+    task.workflow_status = target
+    task.status = target.stage
+    task.save(update_fields=["workflow_status", "status", "updated_at"])
+    if task.status == Task.Status.CANCELLED and previous_stage != task.status:
         _cancel_distribution(task, access.membership)
     return task
 

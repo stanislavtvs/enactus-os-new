@@ -1,5 +1,5 @@
 import {collectionRow, confirmArchive, setupCollection, setupDialog} from "../ui/collection.js";
-import {dateLabel, deadlineState, errorMessage, priorities, readTaskFields, request, selectOptions, statuses} from "./shared.js";
+import {dateLabel, deadlineState, errorMessage, priorities, priorityChip, readTaskFields, request, selectOptions, setupPrioritySelect, statuses, workflowStatusChip} from "./shared.js";
 
 const app = document.querySelector("#tasks-app");
 const api = app.dataset.orgUrl;
@@ -10,8 +10,11 @@ const queue = app.dataset.queue;
 const search = document.querySelector("#tasks-search");
 const toolbar = document.querySelector("#tasks-toolbar");
 const statusFilter = document.querySelector("#tasks-status-filter");
+const workflowStatusFilter = document.querySelector("#tasks-workflow-status-filter");
 const projectFilter = document.querySelector("#tasks-project-filter");
 const departmentFilter = document.querySelector("#tasks-department-filter");
+const priorityFilter = document.querySelector("#tasks-priority-filter");
+const sortFilter = document.querySelector("#tasks-sort");
 const archiveFilter = document.querySelector("#tasks-archive-filter");
 const distributionFilter = document.querySelector("#tasks-distribution-filter");
 const results = document.querySelector("#tasks-list");
@@ -52,6 +55,9 @@ function taskRow(task) {
     if (task.has_dependency_warnings) {
         badges.push({text: "Предупреждение о зависимости"});
     }
+    if (task.is_archived) {
+        badges.push({text: "Архив"});
+    }
     if (mine) {
         const me = options?.current_membership_id;
         if (task.assignee?.id === me) {
@@ -67,13 +73,12 @@ function taskRow(task) {
                 : {text: "Срок в ближайшие 7 дней"});
         }
     }
-    return collectionRow({
+    const row = collectionRow({
         title: task.name,
         href: taskUrl(task),
-        status: `${statuses[task.status] ?? task.status}${task.is_archived ? " · Архив" : ""}`,
+        status: task.workflow_status ? "" : statuses[task.status] ?? task.status,
         details: [
             {label: "Исполнитель", value: task.assignee?.username ?? "Не назначен"},
-            {label: "Приоритет", value: priorities[task.priority] ?? task.priority},
             {label: "Срок", value: task.due_at ? dateLabel(task.due_at) : "—"},
             {label: "Проект", value: task.project?.name},
             {label: "Подразделение", value: task.department?.name},
@@ -84,6 +89,20 @@ function taskRow(task) {
         canArchive: task.permissions.archive,
         onArchive: (trigger) => archiveTask(task, trigger),
     });
+    const priority = priorityChip(task.priority_level, priorities[task.priority] ?? task.priority);
+    priority.classList.add("collection-badge");
+    const priorityLabel = document.createElement("span");
+    priorityLabel.className = "visually-hidden";
+    priorityLabel.textContent = "Приоритет: ";
+    priority.prepend(priorityLabel);
+    const labels = row.querySelector(".collection-item-labels");
+    labels.prepend(priority);
+    if (task.workflow_status) {
+        const chip = workflowStatusChip(task.workflow_status);
+        chip.classList.add("collection-badge");
+        labels.prepend(chip);
+    }
+    return row;
 }
 
 async function archiveTask(task, trigger) {
@@ -123,8 +142,11 @@ async function load() {
     const values = {
         q: search.value.trim(),
         status: statusFilter.value,
+        workflow_status_id: workflowStatusFilter.value,
         project_id: fixedProjectId || projectFilter?.value,
         department_id: departmentFilter.value,
+        priority_id: priorityFilter.value,
+        sort: sortFilter.value,
         mine: mine ? "true" : "",
         queue,
         distribution_pending: distributionFilter?.checked ? "true" : "",
@@ -209,6 +231,7 @@ function setupCreate() {
         createProject.value = String(projects[0].id);
     }
     createProject.disabled = Boolean(fixedProjectId);
+    setupPrioritySelect(form.elements.namedItem("priority_id"), options.priorities);
     updateCreateDepartments();
 }
 
@@ -221,6 +244,9 @@ async function initialize() {
             selectOptions(projectFilter, "Все проекты", records(options.projects));
         }
         selectOptions(departmentFilter, "Все подразделения", records(options.departments));
+        selectOptions(priorityFilter, "Все приоритеты", records(options.priorities));
+        selectOptions(workflowStatusFilter, "Все статусы", options.statuses.map((item) =>
+            [item.id, `${item.name} · ${statuses[item.stage] ?? item.stage}`]));
         setupCreate();
     } catch (error) {
         optionsError = error;
@@ -273,7 +299,7 @@ search.addEventListener("input", () => {
     page = 1;
     searchTimer = setTimeout(load, 250);
 });
-for (const filter of [statusFilter, projectFilter, departmentFilter, archiveFilter, distributionFilter].filter(Boolean)) {
+for (const filter of [statusFilter, workflowStatusFilter, projectFilter, departmentFilter, priorityFilter, sortFilter, archiveFilter, distributionFilter].filter(Boolean)) {
     filter.addEventListener("change", () => {
         clearTimeout(searchTimer);
         page = 1;

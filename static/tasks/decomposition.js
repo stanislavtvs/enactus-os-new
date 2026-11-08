@@ -1,5 +1,5 @@
 import {collectionActions, setupDialog, setupDisclosures} from "../ui/collection.js";
-import {dateLabel, element, errorMessage, readTaskFields, request, selectOptions, statuses} from "./shared.js";
+import {dateLabel, element, errorMessage, readTaskFields, request, selectOptions, setupPrioritySelect, statuses} from "./shared.js";
 
 const treePageSize = 40;
 
@@ -122,7 +122,7 @@ export function taskDecomposition(app, {api, base, token, refresh}) {
 
             const summary = element("div", "task-child-summary");
             const facts = [
-                statuses[child.status] ?? child.status,
+                child.workflow_status?.name ?? statuses[child.status] ?? child.status,
                 child.is_archived ? "Архив" : "",
                 child.assignee ? `Исполнитель: ${memberName(child.assignee)}` : "Без исполнителя",
                 child.due_at ? `Срок: ${dateLabel(child.due_at)}` : "",
@@ -518,6 +518,7 @@ export function taskDecomposition(app, {api, base, token, refresh}) {
                 return;
             }
             childOptions = options;
+            setupPrioritySelect(childForm.elements.namedItem("priority_id"), options.priorities);
             const projects = childProjects();
             const standalone = childOptions.can_create_standalone || childOptions.departments.some(({can_create}) => can_create);
             selectOptions(childProject, standalone ? "Без проекта" : "Выберите проект",

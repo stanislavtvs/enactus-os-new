@@ -107,3 +107,32 @@
 @media (max-width: 40rem) {
     .task-child-row { --child-indent: min(calc(var(--child-depth) * 0.5rem), 1.5rem); }
 }
+
+.task-priority-chip, .task-workflow-status-chip { display: inline-flex; align-items: center; gap: 0.35rem; }
+.task-priority-chip::before, .task-workflow-status-chip::before {
+    content: "";
+    flex: none;
+    width: 0.65rem;
+    height: 0.65rem;
+    border-radius: 50%;
+    border: 1px solid var(--line);
+    background: var(--task-catalog-color, var(--muted));
+}
+.task-color-field input[type="color"] { max-width: 5rem; cursor: pointer; }
+.task-configuration-item > div { min-width: 0; }
+.task-configuration-label { font-weight: 650; overflow-wrap: anywhere; }
+.task-configuration-meta { margin-top: var(--space-xs); }
+
+.task-transition-permissions summary { cursor: pointer; font-weight: 650; }
+.task-permission-options {
+    display: grid;
+    gap: var(--space-xs);
+    margin-top: var(--space-sm);
+}
+.task-permission-options label {
+    display: flex;
+    align-items: start;
+    gap: var(--space-xs);
+    overflow-wrap: anywhere;
+}
+.task-permission-options input { flex: none; }

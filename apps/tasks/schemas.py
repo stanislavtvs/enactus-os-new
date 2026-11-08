@@ -4,9 +4,18 @@ from typing import Annotated, Literal
 from ninja import Schema
 from pydantic import AwareDatetime, ConfigDict, Field, HttpUrl, StringConstraints, field_validator
 
+from apps.access.policy import Permission
 from apps.organizations.models import Organization
 
-from .models import TASK_NAME_MAX_LENGTH, Task, TaskDependency
+from .models import (
+    TASK_NAME_MAX_LENGTH,
+    TASK_PRIORITY_CODE_MAX_LENGTH,
+    TASK_PRIORITY_NAME_MAX_LENGTH,
+    TASK_STATUS_CODE_MAX_LENGTH,
+    TASK_STATUS_NAME_MAX_LENGTH,
+    Task,
+    TaskDependency,
+)
 
 RecordId = Annotated[int, Field(gt=0, le=2**63 - 1)]
 InputId = Annotated[int, Field(gt=0, le=2**63 - 1, strict=True)]
@@ -20,11 +29,12 @@ class TaskChangeInput(Schema):
     )]
     description: Annotated[str, StringConstraints(pattern=r"^[^\x00]*$")] = ""
     priority: Task.Priority = Task.Priority.NORMAL
+    priority_id: InputId | None = None
     department_id: InputId | None = None
     planned_start_at: AwareDatetime | None = None
     due_at: AwareDatetime | None = None
 
-    @field_validator("name", "description", "priority")
+    @field_validator("name", "description", "priority", "priority_id")
     @classmethod
     def reject_null(cls, value):
         if value is None:
@@ -57,6 +67,9 @@ class TaskListQuery(Schema):
     status: Task.Status | None = None
     project_id: RecordId | None = None
     department_id: RecordId | None = None
+    priority_id: RecordId | None = None
+    workflow_status_id: RecordId | None = None
+    sort: Literal["priority", "status"] | None = None
     mine: bool = False
     include_archived: bool = False
     distribution_pending: bool | None = None
@@ -82,12 +95,159 @@ class TaskPermissions(Schema):
     change_status: bool
 
 
+class PriorityLevelOutput(Schema):
+    id: int
+    code: str
+    name: str
+    rank: int
+    color: str
+
+
+class TaskPriorityOutput(PriorityLevelOutput):
+    sort_order: int
+    is_active: bool
+    is_default: bool
+
+
+class TaskPriorityListOutput(Schema):
+    can_manage: bool
+    items: list[TaskPriorityOutput]
+
+
+class TaskPriorityChangeInput(Schema):
+    model_config = ConfigDict(extra="forbid")
+
+    name: Annotated[str, StringConstraints(
+        strip_whitespace=True, min_length=1, max_length=TASK_PRIORITY_NAME_MAX_LENGTH,
+        pattern=r"^[^\x00]+$",
+    )]
+    rank: Annotated[int, Field(ge=-(2**31), le=2**31 - 1, strict=True)]
+    color: Annotated[str, StringConstraints(pattern=r"^#[0-9a-fA-F]{6}$", to_lower=True)]
+    sort_order: Annotated[int, Field(ge=0, le=2**31 - 1, strict=True)] = 0
+    is_default: Annotated[bool, Field(strict=True)] = False
+
+    @field_validator("name", "rank", "color", "sort_order", "is_default")
+    @classmethod
+    def reject_null(cls, value):
+        if value is None:
+            raise ValueError("Поле не может быть пустым.")
+        return value
+
+
+class TaskPriorityInput(TaskPriorityChangeInput):
+    code: Annotated[str, StringConstraints(
+        strip_whitespace=True, min_length=1, max_length=TASK_PRIORITY_CODE_MAX_LENGTH,
+        pattern=r"^[a-z0-9]+(?:[-_][a-z0-9]+)*$",
+    )]
+
+
+class WorkflowStatusOutput(Schema):
+    id: int
+    code: str
+    name: str
+    stage: Task.Status
+    color: str
+
+
+class TaskStatusOutput(WorkflowStatusOutput):
+    sort_order: int
+    is_active: bool
+    is_default: bool
+
+
+class TaskStatusListOutput(Schema):
+    can_manage: bool
+    items: list[TaskStatusOutput]
+
+
+class TaskStatusChangeInput(Schema):
+    model_config = ConfigDict(extra="forbid")
+
+    name: Annotated[str, StringConstraints(
+        strip_whitespace=True, min_length=1, max_length=TASK_STATUS_NAME_MAX_LENGTH,
+        pattern=r"^[^\x00]+$",
+    )]
+    color: Annotated[str, StringConstraints(pattern=r"^#[0-9a-fA-F]{6}$", to_lower=True)]
+    sort_order: Annotated[int, Field(ge=0, le=2**31 - 1, strict=True)] = 0
+    is_default: Annotated[bool, Field(strict=True)] = False
+
+    @field_validator("name", "color", "sort_order", "is_default")
+    @classmethod
+    def reject_null(cls, value):
+        if value is None:
+            raise ValueError("Поле не может быть пустым.")
+        return value
+
+
+class TaskStatusInput(TaskStatusChangeInput):
+    code: Annotated[str, StringConstraints(
+        strip_whitespace=True, min_length=1, max_length=TASK_STATUS_CODE_MAX_LENGTH,
+        pattern=r"^[a-z0-9]+(?:[-_][a-z0-9]+)*$",
+    )]
+    stage: Task.Status
+
+
+class TaskTransitionChangeInput(Schema):
+    model_config = ConfigDict(extra="forbid")
+
+    is_enabled: Annotated[bool, Field(strict=True)] = True
+    allow_assignee: Annotated[bool, Field(strict=True)] = False
+    required_permissions: Annotated[list[Permission], Field(max_length=len(Permission))] = Field(default_factory=list)
+
+    @field_validator("is_enabled", "allow_assignee", "required_permissions")
+    @classmethod
+    def reject_null(cls, value):
+        if value is None:
+            raise ValueError("Поле не может быть пустым.")
+        return value
+
+
+class TaskTransitionInput(TaskTransitionChangeInput):
+    from_status_id: InputId
+    to_status_id: InputId
+
+
+class TaskTransitionOutput(Schema):
+    id: int
+    from_status_id: int
+    to_status_id: int
+    is_enabled: bool
+    allow_assignee: bool
+    required_permissions: list[Permission]
+
+
+class WorkflowPermissionOption(Schema):
+    code: Permission
+    label: str
+
+
+class TaskTransitionListOutput(Schema):
+    can_manage: bool
+    items: list[TaskTransitionOutput]
+    permission_options: list[WorkflowPermissionOption]
+    stage_targets: dict[Task.Status, list[Task.Status]]
+
+
+class TaskWorkflowStatusInput(Schema):
+    model_config = ConfigDict(extra="forbid")
+
+    status_id: InputId
+    expected_status_id: InputId
+
+
+class TaskWorkflowStatusOutput(Schema):
+    current: WorkflowStatusOutput | None
+    allowed_workflow_statuses: list[WorkflowStatusOutput]
+
+
 class TaskOutput(Schema):
     id: int
     name: str
     description: str
     status: Task.Status
     priority: Task.Priority
+    priority_level: PriorityLevelOutput | None
+    workflow_status: WorkflowStatusOutput | None
     planned_start_at: datetime | None
     due_at: datetime | None
     completed_at: datetime | None
@@ -108,6 +268,7 @@ class TaskOutput(Schema):
     has_dependency_warnings: bool
     permissions: TaskPermissions
     allowed_statuses: list[Task.Status]
+    allowed_workflow_statuses: list[WorkflowStatusOutput]
 
 
 class TaskListOutput(Schema):
@@ -133,6 +294,7 @@ class SubtaskOutput(Schema):
     parent_id: int | None
     name: str
     status: Task.Status
+    workflow_status: WorkflowStatusOutput | None
     assignee: MemberOutput | None
     due_at: datetime | None
     is_archived: bool
@@ -268,6 +430,8 @@ class TaskOptions(Schema):
     departments: list[DepartmentOption]
     projects: list[ProjectOption]
     assignees: list[MemberOutput]
+    priorities: list[TaskPriorityOutput]
+    statuses: list[TaskStatusOutput]
 
 
 ReviewPolicy = Literal["project", "department", "department_project"]

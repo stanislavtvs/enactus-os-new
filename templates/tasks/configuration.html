@@ -1,0 +1,83 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Рабочие процессы — {{ organization.name }} — Enactus OS{% endblock %}
+{% block extra_head %}
+    <link rel="stylesheet" href="{% static 'tasks/tasks.css' %}">
+    <link rel="stylesheet" href="{% static 'ui/collection.css' %}">
+    <script type="module" src="{% static 'tasks/configuration.js' %}"></script>
+{% endblock %}
+
+{% block content %}
+    <nav class="breadcrumbs" aria-label="Путь к странице">
+        <a href="{% url 'organization-detail' org_id=organization.id %}">{{ organization.name }}</a>
+    </nav>
+    <header class="page-heading">
+        <p class="eyebrow">{{ organization.name }}</p>
+        <h1>Рабочие процессы</h1>
+        <p>Настройки применяются к задачам этой организации.</p>
+    </header>
+    <noscript><p>Включите JavaScript, чтобы загрузить настройки.</p></noscript>
+
+    <div id="task-configuration-app" class="workspace-grid tasks-page" data-org-url="{{ api_org_url }}">
+        {% csrf_token %}
+        <section class="card card-padded" aria-labelledby="task-priorities-heading">
+            <div class="task-section-header">
+                <div>
+                    <h2 id="task-priorities-heading" tabindex="-1">Приоритеты</h2>
+                    <p class="task-meta">При сортировке задачи с более высоким рангом идут первыми.</p>
+                </div>
+                <button class="button button-primary" id="task-add-priority" type="button" aria-haspopup="dialog" hidden>
+                    <svg class="collection-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+                    Новый приоритет
+                </button>
+            </div>
+            <p id="task-priorities-notice" class="collection-feedback task-gap" role="status"></p>
+            <p id="task-priorities-status" class="muted task-gap" role="status"></p>
+            <p id="task-priorities-error" class="form-errors task-gap" role="alert"></p>
+            <button class="button collection-secondary" id="task-priorities-retry" type="button" hidden>Обновить приоритеты</button>
+            <ul id="task-priorities-list" class="task-list" role="list"></ul>
+        </section>
+
+        {% include "tasks/status_configuration.html" %}
+
+        <dialog id="task-priority-dialog" class="collection-dialog" aria-labelledby="task-priority-dialog-heading">
+            <header class="collection-dialog-header">
+                <h2 id="task-priority-dialog-heading">Новый приоритет</h2>
+                <button class="button collection-secondary" type="button" data-dialog-close aria-label="Закрыть форму">
+                    <svg class="icon" aria-hidden="true"><use href="#icon-close"/></svg>
+                </button>
+            </header>
+            <form id="task-priority-form" class="form-stack" method="post">
+                <div class="form-field">
+                    <label for="task-priority-name">Название</label>
+                    <input id="task-priority-name" name="name" required>
+                </div>
+                <div class="form-field" id="task-priority-code-field">
+                    <label for="task-priority-code">Код</label>
+                    <input id="task-priority-code" name="code" maxlength="64" aria-describedby="task-priority-code-hint">
+                    <p class="form-hint" id="task-priority-code-hint">Используйте строчные латинские буквы и цифры, разделённые дефисом или подчёркиванием. Код не меняется после создания.</p>
+                </div>
+                <div class="task-fields">
+                    <div class="form-field">
+                        <label for="task-priority-rank">Ранг</label>
+                        <input id="task-priority-rank" name="rank" type="number" step="1" min="-2147483648" max="2147483647" required>
+                    </div>
+                    <div class="form-field">
+                        <label for="task-priority-position">Порядок в списке</label>
+                        <input id="task-priority-position" name="sort_order" type="number" step="1" min="0" max="2147483647" required>
+                    </div>
+                    <div class="form-field task-color-field">
+                        <label for="task-priority-color">Цвет</label>
+                        <input id="task-priority-color" name="color" type="color" value="#6b7280">
+                    </div>
+                </div>
+                <p id="task-priority-form-error" class="form-errors" role="alert"></p>
+                <div class="collection-dialog-actions">
+                    <button class="button collection-secondary" type="button" data-dialog-close>Отмена</button>
+                    <button class="button button-primary" id="task-priority-save" type="submit">Сохранить</button>
+                </div>
+            </form>
+        </dialog>
+    </div>
+{% endblock %}

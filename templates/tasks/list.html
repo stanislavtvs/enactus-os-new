@@ -49,8 +49,12 @@
                 </summary>
                 <div class="collection-filter-fields">
                     <div class="form-field">
-                        <label for="tasks-status-filter">Статус</label>
-                        <select id="tasks-status-filter"><option value="">Все статусы</option></select>
+                        <label for="tasks-status-filter">Системный этап</label>
+                        <select id="tasks-status-filter"><option value="">Все этапы</option></select>
+                    </div>
+                    <div class="form-field">
+                        <label for="tasks-workflow-status-filter">Пользовательский статус</label>
+                        <select id="tasks-workflow-status-filter"><option value="">Все статусы</option></select>
                     </div>
                     {% if not project_id %}
                         <div class="form-field">
@@ -61,6 +65,18 @@
                     <div class="form-field">
                         <label for="tasks-department-filter">Подразделение</label>
                         <select id="tasks-department-filter"><option value="">Все подразделения</option></select>
+                    </div>
+                    <div class="form-field">
+                        <label for="tasks-priority-filter">Приоритет</label>
+                        <select id="tasks-priority-filter"><option value="">Все приоритеты</option></select>
+                    </div>
+                    <div class="form-field">
+                        <label for="tasks-sort">Сортировка</label>
+                        <select id="tasks-sort">
+                            <option value="">Сначала новые</option>
+                            <option value="priority">По приоритету, от высокого к низкому</option>
+                            <option value="status">По статусу</option>
+                        </select>
                     </div>
                     {% if not queue %}
                         <label class="task-checkbox"><input id="tasks-distribution-filter" type="checkbox"> Ожидают распределения</label>

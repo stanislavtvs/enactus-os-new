@@ -1,0 +1,108 @@
+<section class="card card-padded" aria-labelledby="task-statuses-heading">
+    <div class="task-section-header">
+        <div>
+            <h2 id="task-statuses-heading" tabindex="-1">Пользовательские статусы</h2>
+            <p class="task-meta">Каждый статус относится к системному этапу задачи.</p>
+        </div>
+        <button class="button button-primary" id="task-add-status" type="button" aria-haspopup="dialog" hidden>
+            <svg class="collection-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+            Новый статус
+        </button>
+    </div>
+    <p id="task-statuses-notice" class="collection-feedback task-gap" role="status"></p>
+    <p id="task-statuses-status" class="muted task-gap" role="status"></p>
+    <p id="task-statuses-error" class="form-errors task-gap" role="alert"></p>
+    <button class="button collection-secondary" id="task-statuses-retry" type="button" hidden>Обновить статусы</button>
+    <ul id="task-statuses-list" class="task-list" role="list"></ul>
+</section>
+
+<section class="card card-padded" aria-labelledby="task-transitions-heading">
+    <div class="task-section-header">
+        <div>
+            <h2 id="task-transitions-heading" tabindex="-1">Переходы между статусами</h2>
+            <p class="task-meta">Правила учитывают полномочия, зависимости и маршрут проверки задачи.</p>
+        </div>
+        <button class="button button-primary" id="task-add-transition" type="button" aria-haspopup="dialog" hidden>
+            <svg class="collection-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+            Новый переход
+        </button>
+    </div>
+    <p id="task-transitions-notice" class="collection-feedback task-gap" role="status"></p>
+    <p id="task-transitions-status" class="muted task-gap" role="status"></p>
+    <p id="task-transitions-error" class="form-errors task-gap" role="alert"></p>
+    <button class="button collection-secondary" id="task-transitions-retry" type="button" hidden>Обновить переходы</button>
+    <ul id="task-transitions-list" class="task-list" role="list"></ul>
+</section>
+
+<dialog id="task-status-dialog" class="collection-dialog" aria-labelledby="task-status-dialog-heading">
+    <header class="collection-dialog-header">
+        <h2 id="task-status-dialog-heading">Новый статус</h2>
+        <button class="button collection-secondary" type="button" data-dialog-close aria-label="Закрыть форму">
+            <svg class="icon" aria-hidden="true"><use href="#icon-close"/></svg>
+        </button>
+    </header>
+    <form id="task-status-editor-form" class="form-stack" method="post">
+        <div class="form-field">
+            <label for="task-status-name">Название</label>
+            <input id="task-status-name" name="name" required>
+        </div>
+        <div class="form-field">
+            <label for="task-status-code">Код</label>
+            <input id="task-status-code" name="code" maxlength="64" aria-describedby="task-status-code-hint">
+            <p class="form-hint" id="task-status-code-hint">Строчные латинские буквы и цифры, разделённые дефисом или подчёркиванием. Код не меняется после создания.</p>
+        </div>
+        <div class="task-fields">
+            <div class="form-field">
+                <label for="task-status-stage">Системный этап</label>
+                <select id="task-status-stage" name="stage" required></select>
+            </div>
+            <div class="form-field">
+                <label for="task-status-position">Порядок в списке</label>
+                <input id="task-status-position" name="sort_order" type="number" step="1" min="0" max="2147483647" required>
+            </div>
+            <div class="form-field task-color-field">
+                <label for="task-status-color">Цвет</label>
+                <input id="task-status-color" name="color" type="color" value="#6b7280">
+            </div>
+        </div>
+        <p id="task-status-form-error" class="form-errors" role="alert"></p>
+        <div class="collection-dialog-actions">
+            <button class="button collection-secondary" type="button" data-dialog-close>Отмена</button>
+            <button class="button button-primary" type="submit">Сохранить</button>
+        </div>
+    </form>
+</dialog>
+
+<dialog id="task-transition-dialog" class="collection-dialog" aria-labelledby="task-transition-dialog-heading">
+    <header class="collection-dialog-header">
+        <h2 id="task-transition-dialog-heading">Новый переход</h2>
+        <button class="button collection-secondary" type="button" data-dialog-close aria-label="Закрыть форму">
+            <svg class="icon" aria-hidden="true"><use href="#icon-close"/></svg>
+        </button>
+    </header>
+    <form id="task-transition-form" class="form-stack" method="post">
+        <div class="task-fields">
+            <div class="form-field">
+                <label for="task-transition-from">Из статуса</label>
+                <select id="task-transition-from" name="from_status_id" required></select>
+            </div>
+            <div class="form-field">
+                <label for="task-transition-to">В статус</label>
+                <select id="task-transition-to" name="to_status_id" required></select>
+            </div>
+        </div>
+        <p class="form-hint">Проверка результата и завершение задачи остаются частью согласования. Архивный статус можно выбрать только как исходный.</p>
+        <label class="task-checkbox"><input id="task-transition-enabled" name="is_enabled" type="checkbox" checked> Переход разрешён</label>
+        <label class="task-checkbox"><input id="task-transition-assignee" name="allow_assignee" type="checkbox"> Разрешить основному исполнителю с правом выполнения переходов</label>
+        <details class="task-transition-permissions">
+            <summary>Дополнительные разрешения</summary>
+            <p class="form-hint task-gap">У исполнителя перехода должны быть все выбранные разрешения.</p>
+            <div id="task-transition-permissions" class="task-permission-options"></div>
+        </details>
+        <p id="task-transition-form-error" class="form-errors" role="alert"></p>
+        <div class="collection-dialog-actions">
+            <button class="button collection-secondary" type="button" data-dialog-close>Отмена</button>
+            <button class="button button-primary" type="submit">Сохранить</button>
+        </div>
+    </form>
+</dialog>

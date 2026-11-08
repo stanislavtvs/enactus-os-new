@@ -101,7 +101,7 @@ class CollectionPageTests(TestCase):
                 "responsible_department_id", "lead_membership_id",
             },
             "task": {
-                "name", "description", "priority", "planned_start_at", "due_at",
+                "name", "description", "priority_id", "planned_start_at", "due_at",
                 "project_id", "department_id",
             },
         }
