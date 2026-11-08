@@ -70,6 +70,13 @@
         </a>{% endif %}
     </nav>
 
+    {% if can_manage_platform %}
+        <nav class="side-nav side-group" aria-label="Платформа">
+            <a href="{% url 'platform-management' %}" title="Управление платформой"{% if route == 'platform-management' %} class="active" aria-current="page"{% endif %}>
+                <svg class="icon" aria-hidden="true"><use href="#icon-settings"/></svg><span class="sidebar-text">Управление платформой</span>
+            </a>
+        </nav>
+    {% endif %}
     <div class="sidebar-footer side-group">
         <nav class="side-nav" aria-label="Учётная запись">
             <a href="{% url 'user-profile' %}" title="Профиль"{% if route == 'user-profile' %} class="active" aria-current="page"{% endif %}>

@@ -14,7 +14,7 @@ from apps.organizations.onboarding_views import (
     organization_join,
     organization_manage,
 )
-from apps.organizations.views import home, organization_detail, organization_list
+from apps.organizations.views import home, organization_detail, organization_list, platform_management
 from apps.organizations.workspace_views import (
     global_settings,
     organization_members,
@@ -53,6 +53,7 @@ urlpatterns = [
     ),
     path("organizations/<int:org_id>/audit/", audit_page, name="organization-audit"),
     path("organizations/", organization_list, name="organization-list"),
+    path("platform/", platform_management, name="platform-management"),
     path("organizations/switch/", organization_switch, name="organization-switch"),
     path("organizations/<int:org_id>/members/", organization_members, name="organization-members"),
     path("organizations/<int:org_id>/settings/modules/", organization_modules, name="organization-modules"),

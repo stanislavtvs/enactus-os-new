@@ -5,7 +5,7 @@ from ninja.security import django_auth
 from . import services
 from .schemas import (
     NotificationCount, NotificationFilter, NotificationLink, NotificationList,
-    NotificationQuery, NotificationRead, NotificationsRead, RecordId,
+    NotificationQuery, NotificationRead, NotificationsRead, NoticeId,
 )
 
 router = Router(auth=django_auth)
@@ -24,7 +24,7 @@ def count_notifications(request, response: HttpResponse, filters: Query[Notifica
 
 
 @router.post("/notifications/{notification_id}/read/", response=NotificationRead)
-def mark_notification_read(request, response: HttpResponse, notification_id: RecordId):
+def mark_notification_read(request, response: HttpResponse, notification_id: NoticeId):
     response["Cache-Control"] = "no-store"
     return services.mark_read(user=request.user, notification_id=notification_id)
 
@@ -36,6 +36,6 @@ def mark_notifications_read(request, response: HttpResponse, filters: Query[Noti
 
 
 @router.get("/notifications/{notification_id}/link/", response=NotificationLink)
-def get_notification_link(request, response: HttpResponse, notification_id: RecordId):
+def get_notification_link(request, response: HttpResponse, notification_id: NoticeId):
     response["Cache-Control"] = "no-store"
     return services.notification_link(user=request.user, notification_id=notification_id)

@@ -1,0 +1,144 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Управление платформой — Enactus OS{% endblock %}
+{% block extra_head %}
+    <link rel="stylesheet" href="{% static 'ui/collection.css' %}">
+    <link rel="stylesheet" href="{% static 'organizations/platform.css' %}">
+    <script type="module" src="{% static 'organizations/platform.js' %}"></script>
+{% endblock %}
+
+{% block content %}
+<div id="platform-app" data-platform-url="{{ platform_api_url }}">
+    <header class="page-heading">
+        <p class="eyebrow">Глобальные настройки</p>
+        <h1>Управление платформой</h1>
+        <p>Определите правила создания организаций, выдавайте разрешения и рассматривайте заявки.</p>
+    </header>
+    {% csrf_token %}
+    <noscript><p>Включите JavaScript, чтобы загрузить настройки платформы.</p></noscript>
+
+    <section class="card card-padded platform-panel" aria-labelledby="platform-policy-heading">
+        <h2 id="platform-policy-heading">Политика создания организаций</h2>
+        <p id="platform-policy-current" class="muted" role="status">Загрузка политики…</p>
+        <p class="form-errors platform-message" id="platform-policy-error" role="alert"></p>
+        <button id="platform-policy-retry" class="button collection-secondary" type="button" hidden>Обновить политику</button>
+        <form class="platform-toolbar" id="platform-policy-form" method="post" hidden>
+            <div class="form-field">
+                <label for="platform-mode">Новый режим</label>
+                <select id="platform-mode" name="mode">
+                    <option value="permission_only">По разрешению</option>
+                    <option value="open">Свободное создание</option>
+                    <option value="request_approval">По заявке</option>
+                </select>
+            </div>
+            <button class="button button-primary" type="submit" id="platform-mode-save" disabled>Изменить режим</button>
+        </form>
+    </section>
+
+    <section class="card card-padded platform-panel" aria-labelledby="platform-grants-heading">
+        <div class="platform-heading">
+            <h2 id="platform-grants-heading" tabindex="-1">Разрешения на создание</h2>
+            <button id="platform-grant-open" class="button collection-secondary" type="button" aria-haspopup="dialog">Добавить разрешение</button>
+        </div>
+        <form id="platform-grants-filter" class="platform-toolbar" method="get">
+            <div class="form-field">
+                <label for="platform-grants-query">Поиск выданных разрешений</label>
+                <input type="search" id="platform-grants-query" name="q" maxlength="150" autocomplete="off">
+            </div>
+            <button class="button collection-secondary" type="submit">Найти</button>
+        </form>
+        <p id="platform-grants-status" class="muted platform-message" role="status"></p>
+        <p id="platform-grants-error" class="form-errors platform-message" role="alert"></p>
+        <button id="platform-grants-retry" class="button collection-secondary" type="button" hidden>Обновить разрешения</button>
+        <ul id="platform-grants-list" class="platform-list" role="list"></ul>
+        <nav class="platform-actions" id="platform-grants-pages" aria-label="Страницы разрешений" hidden>
+            <button class="button collection-secondary" id="platform-grants-previous" type="button">Назад</button>
+            <span class="muted" id="platform-grants-page"></span>
+            <button class="button collection-secondary" id="platform-grants-next" type="button">Далее</button>
+        </nav>
+    </section>
+
+    <section class="card card-padded platform-panel" aria-labelledby="platform-requests-heading">
+        <h2 id="platform-requests-heading" tabindex="-1">Заявки и история решений</h2>
+        <form class="platform-toolbar" id="platform-request-filters" method="get">
+            <div class="form-field">
+                <label for="platform-request-query">Поиск по названию или заявителю</label>
+                <input type="search" id="platform-request-query" name="q" maxlength="150" autocomplete="off">
+            </div>
+            <div class="form-field">
+                <label for="platform-request-status">Статус</label>
+                <select id="platform-request-status" name="status">
+                    <option value="pending">Ожидают рассмотрения</option>
+                    <option value="">Все заявки</option>
+                    <option value="approved">Одобрены</option>
+                    <option value="rejected">Отклонены</option>
+                    <option value="withdrawn">Отозваны</option>
+                </select>
+            </div>
+            <button class="button collection-secondary" type="submit">Найти</button>
+        </form>
+        <p id="platform-requests-status" class="muted platform-message" role="status"></p>
+        <p id="platform-requests-error" class="form-errors platform-message" role="alert"></p>
+        <button id="platform-requests-retry" class="button collection-secondary" type="button" hidden>Обновить заявки</button>
+        <ul id="platform-requests-list" class="platform-list" role="list"></ul>
+        <nav class="platform-actions" id="platform-requests-pages" aria-label="Страницы заявок" hidden>
+            <button class="button collection-secondary" id="platform-requests-previous" type="button">Назад</button>
+            <span class="muted" id="platform-requests-page"></span>
+            <button class="button collection-secondary" id="platform-requests-next" type="button">Далее</button>
+        </nav>
+    </section>
+
+    <dialog class="collection-dialog platform-dialog" id="platform-grant-dialog" aria-labelledby="platform-grant-title">
+        <header class="collection-dialog-header">
+            <h2 id="platform-grant-title">Выдать разрешение</h2>
+            <button class="button collection-secondary" type="button" data-dialog-close aria-label="Закрыть форму">
+                <svg class="icon" aria-hidden="true"><use href="#icon-close"/></svg>
+            </button>
+        </header>
+        <form id="platform-grant-search" class="platform-toolbar" method="get">
+            <div class="form-field">
+                <label for="platform-grant-query">Имя пользователя</label>
+                <input type="search" id="platform-grant-query" name="q" maxlength="150" autocomplete="off" required>
+            </div>
+            <button class="button collection-secondary" type="submit">Найти</button>
+        </form>
+        <p class="muted platform-message" id="platform-grant-status" role="status"></p>
+        <p class="form-errors platform-message" id="platform-grant-error" role="alert"></p>
+        <form id="platform-grant-form" class="form-stack" method="post">
+            <div class="form-field" id="platform-grant-candidates-field" hidden>
+                <label for="platform-grant-candidate">Пользователь</label>
+                <select id="platform-grant-candidate" name="username" required disabled></select>
+            </div>
+            <div class="collection-dialog-actions">
+                <button class="button collection-secondary" type="button" data-dialog-close>Закрыть</button>
+                <button class="button button-primary" id="platform-grant-submit" type="submit" disabled>Выдать разрешение</button>
+            </div>
+        </form>
+    </dialog>
+
+    <dialog class="collection-dialog platform-dialog" id="platform-request-dialog" aria-labelledby="platform-review-title">
+        <header class="collection-dialog-header">
+            <h2 id="platform-review-title">Заявка на создание организации</h2>
+            <button class="button collection-secondary" type="button" data-dialog-close aria-label="Закрыть заявку">
+                <svg class="icon" aria-hidden="true"><use href="#icon-close"/></svg>
+            </button>
+        </header>
+        <p class="muted platform-message" id="platform-review-status" role="status"></p>
+        <p class="form-errors platform-message" id="platform-review-error" role="alert"></p>
+        <dl id="platform-review-facts" class="platform-facts"></dl>
+        <p id="platform-review-description" class="platform-description"></p>
+        <form id="platform-review-form" class="form-stack" method="post" hidden>
+            <div class="form-field">
+                <label for="platform-review-comment">Комментарий к решению</label>
+                <textarea id="platform-review-comment" name="comment" rows="3" aria-describedby="platform-review-comment-hint"></textarea>
+                <p class="form-hint muted" id="platform-review-comment-hint">Для отклонения нужен комментарий.</p>
+            </div>
+            <div class="collection-dialog-actions">
+                <button class="button collection-secondary" type="submit" id="platform-review-reject" name="decision" value="reject">Отклонить</button>
+                <button class="button button-primary" type="submit" id="platform-review-approve" name="decision" value="approve">Одобрить</button>
+            </div>
+        </form>
+    </dialog>
+</div>
+{% endblock %}

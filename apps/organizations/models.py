@@ -230,3 +230,13 @@ class OwnershipTransfer(models.Model):
                 name="ownership_transfer_inbox_idx",
             ),
         ]
+
+
+from .platform_models import (  # noqa: E402, F401
+    OrganizationCreationReceipt,
+    OrganizationCreationRequest,
+    PlatformAuditEvent,
+    PlatformCreationGrant,
+    PlatformCreationPolicy,
+    PlatformNotice,
+)

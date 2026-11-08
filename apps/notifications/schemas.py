@@ -2,11 +2,20 @@ from datetime import datetime
 from typing import Annotated
 
 from ninja import Schema
-from pydantic import ConfigDict, Field
+from pydantic import AfterValidator, ConfigDict, Field
 
 from .models import NotificationEvent
 
 RecordId = Annotated[int, Field(gt=0, le=2**63 - 1)]
+
+
+def _nonzero(value):
+    if value == 0:
+        raise ValueError("Notification ID cannot be zero")
+    return value
+
+
+NoticeId = Annotated[int, Field(ge=-(2**63 - 1), le=2**63 - 1), AfterValidator(_nonzero)]
 
 
 class NotificationFilter(Schema):

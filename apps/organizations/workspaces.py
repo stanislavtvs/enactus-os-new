@@ -11,6 +11,7 @@ from apps.tasks.reviews import can_open_review_inbox
 from apps.tasks.services import can_open_tasks
 
 from .models import Organization
+from .platform_access import is_platform_admin
 from .modules import enabled
 from .services import visible_organizations
 
@@ -45,6 +46,7 @@ SCOPED_ROUTES = {
 }
 
 PAGE_TITLES = {
+    "platform-management": "Управление платформой",
     "organization-audit": "Журнал действий",
     "notifications": "Уведомления",
     "notification-preferences": "Личные настройки уведомлений",
@@ -190,6 +192,7 @@ def workspace_navigation(request):
 
     return {
         "workspace_active": workspace,
+        "can_manage_platform": is_platform_admin(request.user),
         "workspace_choices": list(choices.values()),
         "workspace_has_staffing": any(enabled(org, "staffing") for org in choices.values()),
         "workspace_links": _workspace_links(request, workspace, route),

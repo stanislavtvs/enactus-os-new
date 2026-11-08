@@ -17,6 +17,7 @@ from apps.departments.api import router as departments_router
 from apps.departments.membership_api import router as department_membership_router
 from apps.organizations.modules import ModuleDisabled
 from apps.organizations.modules_api import router as modules_router
+from apps.organizations.platform_api import router as platform_router
 from apps.organizations.ownership_api import router as ownership_router
 from apps.organizations.api import router as organizations_router
 from apps.projects.api import router as projects_router
@@ -48,6 +49,7 @@ def module_disabled(request, exc):
 
 
 api.add_router("", notifications_router)
+api.add_router("/platform", platform_router)
 api.add_router("/organizations", audit_router)
 api.add_router("/organizations", notification_policy_router)
 api.add_router("/organizations", calendar_router)

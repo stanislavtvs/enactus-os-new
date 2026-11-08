@@ -1,5 +1,6 @@
 from datetime import datetime
 from typing import Annotated
+from uuid import UUID
 
 from django.core.exceptions import PermissionDenied
 from django.shortcuts import get_object_or_404
@@ -9,6 +10,7 @@ from ninja.security import django_auth
 from pydantic import StringConstraints, field_validator
 
 from .models import ORGANIZATION_NAME_MAX_LENGTH
+from .platform import CreationConflict, CreationValidation
 from .services import create_organization, visible_organizations
 
 router = Router(auth=django_auth)
@@ -23,6 +25,7 @@ class OrganizationInput(Schema):
             max_length=ORGANIZATION_NAME_MAX_LENGTH,
         ),
     ]
+    idempotency_key: UUID | None = None
 
     @field_validator("name")
     @classmethod
@@ -46,9 +49,15 @@ def list_organizations(request):
 @router.post("/", response={201: OrganizationOutput}, url_name="create_organization")
 def add_organization(request, payload: OrganizationInput):
     try:
-        organization = create_organization(user=request.user, name=payload.name)
+        organization = create_organization(
+            user=request.user, name=payload.name, idempotency_key=payload.idempotency_key,
+        )
     except PermissionDenied:
         raise HttpError(403, "Forbidden") from None
+    except CreationConflict as exc:
+        raise HttpError(409, str(exc)) from None
+    except CreationValidation as exc:
+        raise HttpError(422, str(exc)) from None
     return 201, organization
 
 

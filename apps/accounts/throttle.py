@@ -12,6 +12,7 @@ from .models import AuthThrottle
 IP_LIMITS = {
     "register": 12, "login": 30, "resend": 16, "verify": 40,
     "reset": 16, "reset_confirm": 40, "change_email": 12, "password_change": 15,
+    "organization_request": 20,
 }
 MAIL_ACTIONS = frozenset({"register", "resend", "reset", "change_email"})
 

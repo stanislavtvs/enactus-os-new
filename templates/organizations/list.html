@@ -3,19 +3,40 @@
 
 {% block title %}Мои организации — Enactus OS{% endblock %}
 {% block extra_head %}
-    {% if can_create_organization %}
-        <script type="module" src="{% static 'organizations/organizations.js' %}"></script>
-    {% endif %}
+    <link rel="stylesheet" href="{% static 'ui/collection.css' %}">
+    <link rel="stylesheet" href="{% static 'organizations/platform.css' %}">
+    <script type="module" src="{% static 'organizations/organizations.js' %}"></script>
 {% endblock %}
 
 {% block content %}
-    <header class="page-heading">
-        <p class="eyebrow">Рабочие области</p>
-        <h1>Мои организации</h1>
-        <p>Выберите организацию из списка, чтобы открыть её рабочую область.</p>
+    <div id="organization-list-app" data-platform-url="{{ platform_api_url }}">
+    <header class="page-heading collection-header">
+        <div>
+            <p class="eyebrow">Рабочие области</p>
+            <h1>Мои организации</h1>
+            <p>Выберите организацию из списка, чтобы открыть её рабочую область.</p>
+        </div>
+        {% if creation_policy.can_create or can_create_organization %}
+            <button id="organization-create-open" class="button button-primary" type="button" aria-haspopup="dialog" aria-controls="organization-create-dialog" hidden>+ Создать организацию</button>
+        {% elif creation_policy.can_request %}
+            <button id="organization-request-open" class="button button-primary" type="button" aria-haspopup="dialog" aria-controls="organization-create-dialog" hidden>Подать заявку</button>
+        {% endif %}
     </header>
+    {% csrf_token %}
+    {% if not creation_policy.can_create and not can_create_organization and not creation_policy.can_request %}
+        <p class="muted platform-policy-note">
+            {% if creation_policy.mode == 'permission_only' %}
+                Создавать организации могут пользователи, которым администратор платформы предоставил разрешение.
+                {% if creation_policy.email_verified == False %}
+                    Подтвердите электронную почту в <a href="{% url 'user-profile' %}">профиле</a>.
+                {% endif %}
+            {% elif creation_policy.mode %}
+                Для создания организации или подачи заявки подтвердите электронную почту в <a href="{% url 'user-profile' %}">профиле</a>.
+            {% endif %}
+        </p>
+    {% endif %}
 
-    <div class="workspace-grid{% if can_create_organization %} workspace-grid-with-form{% endif %}">
+    <div class="workspace-grid">
         <section class="card" aria-labelledby="available-organizations">
             <div class="card-heading">
                 <h2 id="available-organizations">Доступные организации</h2>
@@ -25,7 +46,7 @@
                     <thead><tr><th scope="col">Название</th><th scope="col">Дата создания</th></tr></thead>
                     <tbody>
                         {% for organization in organizations %}
-                            <tr>
+                            <tr data-organization-id="{{ organization.id }}">
                                 <th scope="row">
                                     <a class="workspace-link" href="{% url 'organization-detail' org_id=organization.id %}">
                                         <span class="workspace-icon" aria-hidden="true"><svg class="icon"><use href="#icon-org"/></svg></span>
@@ -45,23 +66,56 @@
             {% endif %}
         </section>
 
-        {% if can_create_organization %}
-            <section class="card card-padded" aria-labelledby="new-organization">
-                <h2 id="new-organization">Новая организация</h2>
-                <p class="muted">Вы станете её владельцем и участником.</p>
-                <noscript><p>Для создания организации включите JavaScript.</p></noscript>
-                <form id="organization-create" class="form-stack" method="post" action="{{ organization_api_url }}" hidden>
-                    {% csrf_token %}
+    </div>
+
+    <section class="card card-padded platform-panel" id="organization-requests" aria-labelledby="organization-requests-title" hidden>
+        <div class="platform-heading">
+            <h2 id="organization-requests-title" tabindex="-1">Мои заявки на создание организации</h2>
+            <button id="organization-requests-refresh" class="button collection-secondary" type="button">Обновить заявки</button>
+        </div>
+        <p class="muted platform-message" id="organization-requests-status" role="status"></p>
+        <p class="form-errors platform-message" id="organization-requests-error" role="alert"></p>
+        <ul id="organization-requests-list" class="platform-list" role="list"></ul>
+        <nav class="platform-actions" id="organization-requests-pages" aria-label="Страницы заявок" hidden>
+            <button class="button collection-secondary" id="organization-requests-previous" type="button">Назад</button>
+            <span class="muted" id="organization-requests-page"></span>
+            <button class="button collection-secondary" id="organization-requests-next" type="button">Далее</button>
+        </nav>
+    </section>
+
+    {% if creation_policy.can_create or can_create_organization or creation_policy.can_request %}
+        <dialog class="collection-dialog platform-dialog" id="organization-create-dialog" aria-labelledby="new-organization">
+            <header class="collection-dialog-header">
+                <h2 id="new-organization">{% if creation_policy.can_create or can_create_organization %}Новая организация{% else %}Заявка на создание организации{% endif %}</h2>
+                <button class="button collection-secondary" type="button" data-dialog-close aria-label="Закрыть форму">
+                    <svg class="icon" aria-hidden="true"><use href="#icon-close"/></svg>
+                </button>
+            </header>
+            {% if creation_policy.can_create or can_create_organization %}
+                <form id="organization-create" class="form-stack" method="post" action="{{ organization_api_url }}">
+                    <p>Вы станете владельцем и участником новой организации.</p>
+            {% else %}
+                <form id="organization-request-form" class="form-stack" method="post">
+                    <p>Администратор платформы рассмотрит заявку. Организация появится после одобрения.</p>
+            {% endif %}
                     <div class="form-field">
                         <label for="organization-name">Название</label>
-                        <input id="organization-name" name="name" type="text" required
-                               aria-describedby="organization-name-hint organization-error">
-                        <p id="organization-name-hint" class="form-hint">От 1 до 200 символов.</p>
+                        <input id="organization-name" name="name" type="text" required aria-describedby="organization-name-hint">
+                        <p id="organization-name-hint" class="form-hint muted">От 1 до 200 символов.</p>
                     </div>
-                    <p id="organization-error" class="form-errors" role="alert"></p>
-                    <button class="button button-primary" type="submit">Создать организацию</button>
+                    {% if creation_policy.can_request and not creation_policy.can_create and not can_create_organization %}
+                        <div class="form-field">
+                            <label for="organization-purpose">Описание или цель</label>
+                            <textarea id="organization-purpose" name="description" rows="3" required></textarea>
+                        </div>
+                    {% endif %}
+                    <p id="organization-error" class="form-errors platform-message" role="alert"></p>
+                    <div class="collection-dialog-actions">
+                        <button class="button collection-secondary" type="button" data-dialog-close>Закрыть</button>
+                        <button class="button button-primary" id="organization-create-submit" type="submit">{% if creation_policy.can_create or can_create_organization %}Создать организацию{% else %}Отправить заявку{% endif %}</button>
+                    </div>
                 </form>
-            </section>
-        {% endif %}
+        </dialog>
+    {% endif %}
     </div>
 {% endblock %}

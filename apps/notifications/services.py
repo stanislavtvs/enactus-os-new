@@ -10,6 +10,7 @@ from django.utils import timezone
 
 from apps.organizations.models import Organization, OrganizationInvitation, OrganizationMembership
 
+from . import platform
 from .models import Notification, NotificationEvent
 from .module_scope import exclude_disabled_events
 
@@ -256,7 +257,10 @@ def _filtered_rows(user, *, category=None, org_id=None):
 
 
 def unread_count(*, user, category=None, org_id=None):
-    return _filtered_rows(user, category=category, org_id=org_id).filter(read_at__isnull=True).count()
+    return (
+        _filtered_rows(user, category=category, org_id=org_id).filter(read_at__isnull=True).count()
+        + platform.recipient_rows(user, category=category, org_id=org_id).filter(read_at__isnull=True).count()
+    )
 
 
 def _organization_choices(user):
@@ -280,10 +284,24 @@ def _present(user, notifications):
 
 def list_notifications(*, user, category=None, org_id=None, unread=False, page=1, page_size=20):
     rows = _filtered_rows(user, category=category, org_id=org_id)
+    platform_rows = platform.recipient_rows(user, category=category, org_id=org_id)
     if unread:
         rows = rows.filter(read_at__isnull=True)
+        platform_rows = platform_rows.filter(read_at__isnull=True)
     offset = (page - 1) * page_size
-    items = list(rows.select_related("event__organization", "event__actor").order_by("-pk")[offset:offset + page_size])
+    platform_total = platform_rows.count()
+    references = None
+    related = rows.select_related("event__organization", "event__actor")
+    if platform_total:
+        references = list(
+            rows.order_by().annotate(notice_id=F("pk")).values_list("created_at", "notice_id").union(
+                platform_rows.order_by().annotate(notice_id=-F("pk")).values_list("created_at", "notice_id"),
+                all=True,
+            ).order_by("-created_at", "-notice_id")[offset:offset + page_size]
+        )
+        items = list(related.filter(pk__in=[pk for _, pk in references if pk > 0]))
+    else:
+        items = list(related.order_by("-pk")[offset:offset + page_size])
     presented = _present(user, items)
     data = []
     for item in items:
@@ -301,20 +319,30 @@ def list_notifications(*, user, category=None, org_id=None, unread=False, page=1
             "read_at": item.read_at,
             "available": bool(detail.get("url")),
         })
+    if references is not None:
+        by_id = {item["id"]: item for item in data}
+        by_id.update({
+            -item.pk: platform.item_output(item)
+            for item in platform_rows.filter(pk__in=[-pk for _, pk in references if pk < 0])
+        })
+        data = [by_id[pk] for _, pk in references if pk in by_id]
     return {
-        "items": data, "total": rows.count(), "page": page, "page_size": page_size,
+        "items": data, "total": rows.count() + platform_total, "page": page, "page_size": page_size,
         "organizations": _organization_choices(user) if user.is_authenticated and user.is_active else [],
     }
 
 
 @transaction.atomic
 def mark_read(*, user, notification_id):
-    rows = _recipient_rows(user)
-    item = get_object_or_404(rows, pk=notification_id)
+    if notification_id < 0:
+        rows, pk = platform.recipient_rows(user), -notification_id
+    else:
+        rows, pk = _recipient_rows(user), notification_id
+    item = get_object_or_404(rows, pk=pk)
     if item.read_at is None:
-        rows.filter(pk=notification_id, read_at__isnull=True).update(read_at=timezone.now())
+        rows.filter(pk=pk, read_at__isnull=True).update(read_at=timezone.now())
         item.refresh_from_db(fields=["read_at"])
-    return {"id": item.pk, "read_at": item.read_at, "unread": unread_count(user=user)}
+    return {"id": notification_id, "read_at": item.read_at, "unread": unread_count(user=user)}
 
 
 @transaction.atomic
@@ -322,10 +350,15 @@ def mark_all_read(*, user, category=None, org_id=None):
     updated = _filtered_rows(user, category=category, org_id=org_id).filter(
         read_at__isnull=True,
     ).update(read_at=timezone.now())
+    updated += platform.recipient_rows(user, category=category, org_id=org_id).filter(
+        read_at__isnull=True,
+    ).update(read_at=timezone.now())
     return {"updated": updated, "unread": unread_count(user=user)}
 
 
 def notification_link(*, user, notification_id):
+    if notification_id < 0:
+        return {"url": platform.notice_link(user, notification_id)}
     item = get_object_or_404(
         _recipient_rows(user).select_related("event__organization", "event__actor"), pk=notification_id,
     )

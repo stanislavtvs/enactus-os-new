@@ -98,3 +98,14 @@ curl --fail https://enactus.example/api/v1/health/
 "${prod[@]}" ps --all
 "${prod[@]}" logs --tail=100 migrate web worker
 ```
+
+## Доступ к управлению платформой
+
+После применения миграций назначьте явное платформенное право существующему активному аккаунту. Выполняйте команды из операторского контура с доступом к Compose.
+
+```bash
+docker compose exec web python manage.py platform_admin grant USERNAME --confirm
+docker compose exec web python manage.py platform_admin revoke USERNAME --confirm
+```
+
+Операции меняют членство в группе `enactus-platform-admin` и записывают платформенный аудит. После назначения пользователь может открыть `/platform/` и управлять политикой создания, заявками и выдачей прав на создание. Отзыв группы прекращает платформенный доступ. Права в организациях управляются отдельно.
