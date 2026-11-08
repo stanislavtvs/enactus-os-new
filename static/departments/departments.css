@@ -1,0 +1,117 @@
+.department-toolbar,
+.department-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-xs) var(--space-sm);
+}
+
+.department-toolbar { justify-content: space-between; }
+.department-filter {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-xs);
+    color: var(--muted);
+    font-size: 0.86rem;
+    cursor: pointer;
+}
+
+.department-message:not(:empty) { margin-block: var(--space-sm); }
+.department-panel > .department-secondary { margin-top: var(--space-sm); }
+.department-list {
+    padding: 0;
+    margin: 0;
+    list-style: none;
+}
+
+.department-list-root { margin-top: var(--space-sm); }
+.department-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: start;
+    gap: var(--space-xs) var(--space-sm);
+    padding: var(--space-sm) 0;
+    padding-inline-start: min(calc(var(--department-depth) * 0.85rem), 3.4rem);
+    border-top: 1px solid var(--line);
+}
+
+.department-toggle,
+.department-toggle-placeholder {
+    flex: none;
+    width: 1.75rem;
+    height: 1.75rem;
+}
+
+.department-toggle {
+    border: 1px solid var(--line);
+    border-radius: 0.4rem;
+    background: var(--subtle);
+    color: var(--ink);
+}
+
+.department-info {
+    flex: 1 1 10rem;
+    min-width: 0;
+    overflow-wrap: anywhere;
+}
+
+.department-name { font-weight: 650; }
+.department-description {
+    margin-top: var(--space-xs);
+    color: var(--muted);
+    font-size: 0.87rem;
+    white-space: pre-wrap;
+}
+
+.department-archived {
+    display: inline-block;
+    margin-inline-start: var(--space-xs);
+    padding: 0.1rem 0.4rem;
+    border-radius: 0.35rem;
+    background: var(--subtle);
+    color: var(--muted);
+    font-size: 0.75rem;
+    font-weight: 600;
+}
+
+.department-fields {
+    display: grid;
+    gap: var(--space-md);
+    min-width: 0;
+    margin: 0;
+    padding: 0;
+    border: 0;
+}
+
+.department-fields select,
+.department-fields textarea {
+    width: 100%;
+    min-height: 2.75rem;
+    padding: 0.55rem 0.7rem;
+    border: 1px solid var(--input-line);
+    border-radius: 0.55rem;
+    background: var(--surface);
+    color: var(--ink);
+    font: inherit;
+}
+
+.department-fields textarea { resize: vertical; }
+.department-fields .form-errors:empty { margin-top: calc(-1 * var(--space-md)); }
+.department-secondary {
+    border-color: var(--line);
+    background: var(--surface);
+    color: var(--ink);
+}
+
+.department-secondary:hover { background: var(--subtle); }
+.department-row .button {
+    min-height: 2rem;
+    padding: 0.3rem 0.55rem;
+    font-size: 0.8rem;
+}
+
+@media (max-width: 30rem) {
+    .department-row {
+        padding-inline-start: min(calc(var(--department-depth) * 0.55rem), 1.65rem);
+    }
+}
