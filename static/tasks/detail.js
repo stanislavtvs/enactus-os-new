@@ -206,4 +206,8 @@ archive.addEventListener("click", () => {
     }
 });
 retry.addEventListener("click", () => load());
-load();
+load().then(() => {
+    if (window.location.hash === "#edit" && !editPanel.hidden) {
+        editPanel.querySelector('[name="name"]').focus();
+    }
+});

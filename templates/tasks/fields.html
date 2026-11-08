@@ -1,6 +1,6 @@
 <div class="form-field">
     <label for="task-name">Название</label>
-    <input id="task-name" name="name" required>
+    <input id="task-name" name="name" required{% if initial_focus %} autofocus{% endif %}>
 </div>
 <div class="form-field">
     <label for="task-description">Описание</label>

@@ -1,71 +1,86 @@
 {% extends "base.html" %}
 {% load static %}
 
-{% block title %}{% if mine %}Мои задачи{% else %}Задачи{% endif %} — {{ organization.name }} — Enactus OS{% endblock %}
+{% block title %}{% if mine %}Мои задачи{% elif project_id %}Задачи проекта{% else %}Задачи{% endif %} — {{ organization.name }} — Enactus OS{% endblock %}
 {% block extra_head %}
     <link rel="stylesheet" href="{% static 'tasks/tasks.css' %}">
+    <link rel="stylesheet" href="{% static 'ui/collection.css' %}">
     <script type="module" src="{% static 'tasks/list.js' %}"></script>
 {% endblock %}
 
 {% block content %}
-    <nav class="breadcrumbs" aria-label="Путь к странице">
-        <a href="{% url 'organization-detail' org_id=organization.id %}">{{ organization.name }}</a>
-        {% if project_id %}
-            <span aria-hidden="true"> / </span>
-            <a href="{% url 'organization-project' org_id=organization.id project_id=project_id %}">Карточка проекта</a>
-        {% endif %}
-    </nav>
-    <header class="page-heading">
-        <p class="eyebrow">{{ organization.name }}{% if project %} · {{ project.name }}{% endif %}</p>
-        <h1>{% if mine %}Мои задачи{% elif project_id %}Задачи проекта{% else %}Задачи{% endif %}</h1>
-        {% if mine %}
-            <p>Задачи, в которых вы назначены исполнителем или соисполнителем. Ближайшие сроки отмечены за 7 дней до дедлайна.</p>
-        {% endif %}
-    </header>
-
-    <noscript><p>Включите JavaScript, чтобы загрузить задачи.</p></noscript>
-    <div id="tasks-app" class="workspace-grid tasks-page" data-org-url="{{ api_org_url }}"
+    {% if project_id %}
+        <nav class="breadcrumbs" aria-label="Путь к странице">
+            <a href="{% url 'organization-project' org_id=organization.id project_id=project_id %}">{{ project.name }}</a>
+        </nav>
+    {% endif %}
+    <div id="tasks-app" data-org-url="{{ api_org_url }}"
          data-detail-url="{% url 'organization-tasks' org_id=organization.id %}"
          data-mine="{{ mine|yesno:'true,false' }}" data-project-id="{{ project_id|default_if_none:'' }}">
-        {% csrf_token %}
-        <section class="card card-padded" aria-labelledby="task-list-heading">
-            <h2 id="task-list-heading">Список задач</h2>
-            <div class="task-fields task-gap" id="tasks-filters" hidden>
-                <div class="form-field">
-                    <label for="tasks-search">Поиск по названию или описанию</label>
-                    <input id="tasks-search" type="search">
-                </div>
-                <div class="form-field">
-                    <label for="tasks-status-filter">Статус</label>
-                    <select id="tasks-status-filter"><option value="">Все статусы</option></select>
-                </div>
-                {% if not project_id %}
-                    <div class="form-field">
-                        <label for="tasks-project-filter">Проект</label>
-                        <select id="tasks-project-filter"><option value="">Все проекты</option></select>
-                    </div>
-                {% endif %}
-                <div class="form-field">
-                    <label for="tasks-department-filter">Подразделение</label>
-                    <select id="tasks-department-filter"><option value="">Все подразделения</option></select>
-                </div>
-                <label class="task-checkbox"><input id="tasks-archive-filter" type="checkbox"> Показывать архивные</label>
+        <header class="page-heading collection-header">
+            <div>
+                <p class="eyebrow">{{ organization.name }}</p>
+                <h1 id="tasks-heading">{% if mine %}Мои задачи{% elif project_id %}Задачи проекта{% else %}Задачи{% endif %}</h1>
             </div>
-            <p id="tasks-status" class="muted task-gap" role="status"></p>
-            <p id="tasks-error" class="form-errors task-gap" role="alert"></p>
-            <button id="tasks-retry" type="button" class="button task-secondary" hidden>Обновить список</button>
-            <ul id="tasks-list" class="task-list" role="list"></ul>
-            <nav id="tasks-pagination" class="task-actions task-gap" aria-label="Страницы задач" hidden>
-                <button id="tasks-previous" class="button task-secondary" type="button">Назад</button>
-                <span id="tasks-page-number"></span>
-                <button id="tasks-next" class="button task-secondary" type="button">Дальше</button>
-            </nav>
-        </section>
+            <button type="button" class="button button-primary" id="task-create-open"
+                    aria-haspopup="dialog" aria-controls="task-create-panel" hidden>
+                <svg class="collection-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+                Новая задача
+            </button>
+        </header>
+        <noscript><p>Включите JavaScript, чтобы загрузить задачи.</p></noscript>
 
-        <section class="card card-padded" id="task-create-panel" aria-labelledby="task-create-heading" hidden>
-            <h2 id="task-create-heading">Новая задача</h2>
+        <div class="collection-toolbar" id="tasks-toolbar" hidden>
+            <div class="form-field collection-search">
+                <input id="tasks-search" type="search" aria-label="Поиск по названию или описанию"
+                       placeholder="Поиск задач">
+            </div>
+            {% include "includes/collection_modes.html" %}
+            <details class="collection-filters" id="tasks-filters">
+                <summary class="button collection-secondary">
+                    <svg class="collection-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 7h14M8 12h8m-5 5h2"/></svg>
+                    Фильтры
+                </summary>
+                <div class="collection-filter-fields">
+                    <div class="form-field">
+                        <label for="tasks-status-filter">Статус</label>
+                        <select id="tasks-status-filter"><option value="">Все статусы</option></select>
+                    </div>
+                    {% if not project_id %}
+                        <div class="form-field">
+                            <label for="tasks-project-filter">Проект</label>
+                            <select id="tasks-project-filter"><option value="">Все проекты</option></select>
+                        </div>
+                    {% endif %}
+                    <div class="form-field">
+                        <label for="tasks-department-filter">Подразделение</label>
+                        <select id="tasks-department-filter"><option value="">Все подразделения</option></select>
+                    </div>
+                    <label class="task-checkbox"><input id="tasks-archive-filter" type="checkbox"> Показывать архивные</label>
+                </div>
+            </details>
+        </div>
+        <p id="tasks-notice" class="collection-feedback muted" role="status"></p>
+        <p id="tasks-status" class="muted" role="status"></p>
+        <p id="tasks-error" class="form-errors" role="alert"></p>
+        <button id="tasks-retry" type="button" class="button collection-secondary" hidden>Обновить список</button>
+        <ul id="tasks-list" class="collection-items" role="list" aria-labelledby="tasks-heading"></ul>
+        <nav id="tasks-pagination" class="task-actions task-gap" aria-label="Страницы задач" hidden>
+            <button id="tasks-previous" class="button collection-secondary" type="button">Назад</button>
+            <span id="tasks-page-number"></span>
+            <button id="tasks-next" class="button collection-secondary" type="button">Дальше</button>
+        </nav>
+
+        <dialog class="collection-dialog" id="task-create-panel" aria-labelledby="task-create-heading">
+            <header class="collection-dialog-header">
+                <h2 id="task-create-heading">Новая задача</h2>
+                <button class="button collection-secondary" type="button" data-dialog-close aria-label="Закрыть форму">
+                    <svg class="icon" aria-hidden="true"><use href="#icon-close"/></svg>
+                </button>
+            </header>
             <form id="task-create-form" class="form-stack" method="post">
-                {% include "tasks/fields.html" %}
+                {% csrf_token %}
+                {% include "tasks/fields.html" with initial_focus=True %}
                 <div class="task-fields">
                     <div class="form-field">
                         <label for="task-create-project">Проект</label>
@@ -77,8 +92,11 @@
                     </div>
                 </div>
                 <p id="task-create-error" class="form-errors" role="alert"></p>
-                <button class="button button-primary" type="submit">Создать задачу</button>
+                <div class="collection-dialog-actions">
+                    <button class="button collection-secondary" type="button" data-dialog-close>Отмена</button>
+                    <button class="button button-primary" type="submit">Создать задачу</button>
+                </div>
             </form>
-        </section>
+        </dialog>
     </div>
 {% endblock %}

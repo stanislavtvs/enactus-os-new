@@ -1,12 +1,13 @@
-import {dateLabel, deadlineState, element, errorMessage, priorities, readTaskFields, request, selectOptions, statuses} from "./shared.js";
+import {collectionRow, confirmArchive, setupCollection, setupDialog} from "../ui/collection.js";
+import {dateLabel, deadlineState, errorMessage, priorities, readTaskFields, request, selectOptions, statuses} from "./shared.js";
 
 const app = document.querySelector("#tasks-app");
 const api = app.dataset.orgUrl;
 const token = app.querySelector('[name="csrfmiddlewaretoken"]').value;
 const fixedProjectId = app.dataset.projectId;
 const mine = app.dataset.mine === "true";
-const filters = document.querySelector("#tasks-filters");
 const search = document.querySelector("#tasks-search");
+const toolbar = document.querySelector("#tasks-toolbar");
 const statusFilter = document.querySelector("#tasks-status-filter");
 const projectFilter = document.querySelector("#tasks-project-filter");
 const departmentFilter = document.querySelector("#tasks-department-filter");
@@ -19,53 +20,75 @@ const pagination = document.querySelector("#tasks-pagination");
 const previous = document.querySelector("#tasks-previous");
 const next = document.querySelector("#tasks-next");
 const createPanel = document.querySelector("#task-create-panel");
+const createOpen = document.querySelector("#task-create-open");
+const notice = document.querySelector("#tasks-notice");
 const form = document.querySelector("#task-create-form");
 const createProject = document.querySelector("#task-create-project");
 const createDepartment = document.querySelector("#task-create-department");
 const createError = document.querySelector("#task-create-error");
+
+setupCollection(app, results, "enactus-tasks-view");
+const dialog = setupDialog(createPanel, createOpen);
 
 let options;
 let page = 1;
 let generation = 0;
 let searchTimer;
 
+function taskUrl(task) {
+    return `${app.dataset.detailUrl}${task.id}/`;
+}
+
 function taskRow(task) {
-    const row = element("li", "task-row");
-    const summary = element("div", "");
-    const title = element("a", "", task.name);
-    title.href = `${app.dataset.detailUrl}${task.id}/`;
-    summary.append(title);
-    const facts = [task.project?.name, task.department?.name, task.assignee ? `Исполнитель: ${task.assignee.username}` : "Без исполнителя"];
-    if (task.due_at) {
-        facts.push(`Срок: ${dateLabel(task.due_at)}`);
-    }
-    summary.append(element("p", "task-meta", facts.filter(Boolean).join(" · ")));
-    const badges = element("p", "");
-    badges.append(element("span", "task-badge", statuses[task.status] ?? "Статус неизвестен"));
-    badges.append(element("span", "task-badge", `Приоритет: ${priorities[task.priority] ?? task.priority}`));
-    if (task.is_archived) {
-        badges.append(element("span", "task-badge", "Архив"));
-    }
+    const badges = [];
     if (mine) {
         const me = options?.current_membership_id;
         if (task.assignee?.id === me) {
-            badges.append(element("span", "task-badge", "Исполнитель"));
+            badges.push({text: "Исполнитель"});
         }
         if (task.collaborators.some(({id}) => id === me)) {
-            badges.append(element("span", "task-badge", "Соисполнитель"));
-        }
-        if (task.author?.id === me) {
-            badges.append(element("span", "task-badge", "Автор"));
+            badges.push({text: "Соисполнитель"});
         }
         const deadline = deadlineState(task);
         if (deadline) {
-            badges.append(element("span", `task-badge${deadline === "overdue" ? " task-badge-overdue" : ""}`,
-                deadline === "overdue" ? "Просрочена" : "Срок в ближайшие 7 дней"));
+            badges.push(deadline === "overdue"
+                ? {text: "Просрочена", kind: "danger"}
+                : {text: "Срок в ближайшие 7 дней"});
         }
     }
-    summary.append(badges);
-    row.append(summary);
-    return row;
+    return collectionRow({
+        title: task.name,
+        href: taskUrl(task),
+        status: `${statuses[task.status] ?? task.status}${task.is_archived ? " · Архив" : ""}`,
+        details: [
+            {label: "Исполнитель", value: task.assignee?.username ?? "Не назначен"},
+            {label: "Приоритет", value: priorities[task.priority] ?? task.priority},
+            {label: "Срок", value: task.due_at ? dateLabel(task.due_at) : "—"},
+            {label: "Проект", value: task.project?.name},
+            {label: "Подразделение", value: task.department?.name},
+        ],
+        badges,
+        canEdit: task.permissions.update,
+        canArchive: task.permissions.archive,
+        onArchive: (trigger) => archiveTask(task, trigger),
+    });
+}
+
+async function archiveTask(task, trigger) {
+    if (!await confirmArchive(task.name)) {
+        return;
+    }
+    errorBox.textContent = "";
+    try {
+        await request(`${api}tasks/${task.id}/`, "DELETE", token);
+        notice.textContent = "Задача архивирована.";
+        if (trigger?.isConnected && trigger.contains(document.activeElement)) {
+            search.focus();
+        }
+        await load();
+    } catch (error) {
+        errorBox.textContent = errorMessage(error);
+    }
 }
 
 function render(data) {
@@ -115,6 +138,7 @@ async function load() {
             return load();
         }
         render(data);
+        toolbar.hidden = false;
     } catch (error) {
         if (current !== generation) {
             return;
@@ -154,10 +178,10 @@ function updateCreateDepartments() {
 function setupCreate() {
     const projects = availableProjects();
     const standalone = options.can_create_standalone || options.departments.some(({can_create}) => can_create);
-    createPanel.hidden = fixedProjectId
+    createOpen.hidden = fixedProjectId
         ? !projects.some(({id}) => String(id) === fixedProjectId)
         : !standalone && !projects.length;
-    if (createPanel.hidden) {
+    if (createOpen.hidden) {
         return;
     }
     selectOptions(createProject, standalone ? "Без проекта" : "Выберите проект",
@@ -172,6 +196,7 @@ function setupCreate() {
 }
 
 async function initialize() {
+    let optionsError;
     try {
         options = await request(`${api}task-options/`);
         const records = (items) => items.map(({id, name}) => [id, name]);
@@ -181,10 +206,13 @@ async function initialize() {
         selectOptions(departmentFilter, "Все подразделения", records(options.departments));
         setupCreate();
     } catch (error) {
-        createError.textContent = errorMessage(error);
+        optionsError = error;
     }
-    filters.hidden = false;
     await load();
+    if (optionsError && !errorBox.textContent) {
+        errorBox.textContent = `Не удалось загрузить параметры задач. ${errorMessage(optionsError)}`;
+        retry.hidden = false;
+    }
 }
 
 form.addEventListener("submit", async (event) => {
@@ -199,13 +227,22 @@ form.addEventListener("submit", async (event) => {
     }
     payload.project_id = createProject.value ? Number(createProject.value) : null;
     payload.department_id = createDepartment.value ? Number(createDepartment.value) : null;
-    form.inert = true;
+    dialog.setBusy(true);
     try {
         const task = await request(`${api}tasks/`, "POST", token, payload);
-        window.location.assign(`${app.dataset.detailUrl}${task.id}/`);
+        dialog.setBusy(false);
+        dialog.close();
+        form.reset();
+        setupCreate();
+        const link = document.createElement("a");
+        link.href = taskUrl(task);
+        link.textContent = "Открыть задачу";
+        notice.replaceChildren("Задача создана. ", link);
+        page = 1;
+        await load();
     } catch (error) {
         createError.textContent = errorMessage(error);
-        form.inert = false;
+        dialog.setBusy(false);
     }
 });
 
@@ -229,5 +266,5 @@ for (const filter of [statusFilter, projectFilter, departmentFilter, archiveFilt
 previous.addEventListener("click", () => { page--; load(); });
 next.addEventListener("click", () => { page++; load(); });
 createProject.addEventListener("change", updateCreateDepartments);
-retry.addEventListener("click", load);
+retry.addEventListener("click", () => options ? load() : initialize());
 initialize();
