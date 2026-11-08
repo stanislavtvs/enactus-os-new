@@ -9,6 +9,7 @@ from django.views.decorators.http import require_GET, require_POST, require_http
 
 from apps.access.policy import Access
 from apps.projects.staffing import StaffingConflict, set_assignment_mode
+from apps.tasks.reviews import set_organization_review_policy
 
 from .models import Organization
 from .onboarding import OnboardingError, set_join_policy
@@ -30,6 +31,12 @@ class ProjectAssignmentModeForm(forms.Form):
 class TaskAssignmentModeForm(forms.Form):
     task_mode = forms.ChoiceField(
         label="Способ назначения задач", choices=Organization.TaskAssignmentMode.choices,
+    )
+
+
+class TaskReviewPolicyForm(forms.Form):
+    review_policy = forms.ChoiceField(
+        label="Маршрут проверки по умолчанию", choices=Organization.TaskReviewPolicy.choices,
     )
 
 
@@ -68,6 +75,7 @@ def organization_settings(request, org_id):
     status = 200
     assignment_form = ProjectAssignmentModeForm(initial={"mode": organization.project_assignment_mode})
     task_assignment_form = TaskAssignmentModeForm(initial={"task_mode": organization.task_assignment_mode})
+    review_form = TaskReviewPolicyForm(initial={"review_policy": organization.task_review_policy})
     form = PolicyForm(initial={"policy": organization.join_policy})
     if request.method == "POST" and request.POST.get("action") == "assignment_mode":
         assignment_form = ProjectAssignmentModeForm(request.POST)
@@ -93,6 +101,14 @@ def organization_settings(request, org_id):
                 organization.task_assignment_mode = task_assignment_form.cleaned_data["task_mode"]
                 organization.save(update_fields=["task_assignment_mode"])
             return redirect("organization-settings", org_id=org_id)
+    elif request.method == "POST" and request.POST.get("action") == "task_review_policy":
+        review_form = TaskReviewPolicyForm(request.POST)
+        status = 400
+        if review_form.is_valid():
+            set_organization_review_policy(
+                user=request.user, org_id=org_id, policy=review_form.cleaned_data["review_policy"],
+            )
+            return redirect("organization-settings", org_id=org_id)
     elif request.method == "POST":
         form = PolicyForm(request.POST)
         status = 400
@@ -109,6 +125,7 @@ def organization_settings(request, org_id):
         "policy_form": form,
         "assignment_form": assignment_form,
         "task_assignment_form": task_assignment_form,
+        "review_form": review_form,
     }, status=status)
 
 

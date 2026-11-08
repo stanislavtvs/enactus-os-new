@@ -4,6 +4,7 @@
 {% block title %}Задача — {{ organization.name }} — Enactus OS{% endblock %}
 {% block extra_head %}
     <link rel="stylesheet" href="{% static 'tasks/tasks.css' %}">
+    <link rel="stylesheet" href="{% static 'ui/collection.css' %}">
     <script type="module" src="{% static 'tasks/detail.js' %}"></script>
 {% endblock %}
 
@@ -43,6 +44,8 @@
                 <button class="button task-secondary" id="task-archive" type="button" hidden>Архивировать задачу</button>
             </div>
         </section>
+
+        {% include "tasks/workflow.html" %}
 
         <section class="card card-padded" id="task-people" aria-labelledby="task-people-heading" hidden>
             <h2 id="task-people-heading">Исполнители</h2>

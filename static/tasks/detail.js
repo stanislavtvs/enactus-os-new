@@ -1,4 +1,5 @@
 import {dateLabel, deadlineState, element, errorMessage, localValue, priorities, readTaskFields, request, selectOptions, statuses} from "./shared.js";
+import {taskWorkflow} from "./workflow.js";
 
 const app = document.querySelector("#task-app");
 const base = app.dataset.orgUrl;
@@ -27,6 +28,15 @@ const editError = document.querySelector("#task-edit-error");
 
 let task;
 let busy = false;
+const workflow = taskWorkflow(app, {
+    api,
+    token,
+    async refresh(message) {
+        if (await load(message)) {
+            heading.focus();
+        }
+    },
+});
 
 function renderInfo() {
     heading.textContent = task.name;
@@ -114,7 +124,7 @@ function setupEdit(options) {
 
 function setBusy(value) {
     busy = value;
-    for (const panel of [info, people, editPanel]) {
+    for (const panel of [info, people, editPanel, workflow.panel]) {
         panel.inert = value;
     }
 }
@@ -129,14 +139,27 @@ async function load(message = "") {
         renderInfo();
         renderPeople();
         editPanel.hidden = true;
-        if (task.permissions.update || task.permissions.assign) {
-            const options = await request(`${base}task-options/?task_id=${encodeURIComponent(app.dataset.taskId)}`);
+        workflow.panel.hidden = true;
+        const [workflowResult, optionsResult] = await Promise.allSettled([
+            request(`${api}workflow/`),
+            task.permissions.update || task.permissions.assign
+                ? request(`${base}task-options/?task_id=${encodeURIComponent(app.dataset.taskId)}`) : null,
+        ]);
+        if (workflowResult.status === "fulfilled") {
+            workflow.render(task, workflowResult.value);
+        }
+        if (optionsResult.status === "fulfilled" && optionsResult.value) {
+            const options = optionsResult.value;
             if (task.permissions.update) {
                 setupEdit(options);
             }
             if (task.permissions.assign && options.assignment_mode === "direct") {
                 renderPeople(true, options.assignees);
             }
+        }
+        const failure = [workflowResult, optionsResult].find(({status}) => status === "rejected");
+        if (failure) {
+            throw failure.reason;
         }
         status.textContent = message;
         return true;

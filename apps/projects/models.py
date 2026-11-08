@@ -19,6 +19,9 @@ class Project(models.Model):
     name = models.CharField(max_length=PROJECT_NAME_MAX_LENGTH)
     description = models.TextField(blank=True, default="")
     status = models.CharField(max_length=9, choices=Status, default=Status.DRAFT)
+    task_review_policy = models.CharField(
+        max_length=18, choices=Organization.TaskReviewPolicy, null=True, blank=True,
+    )
     lead_membership = models.ForeignKey(
         OrganizationMembership, on_delete=models.PROTECT, null=True, blank=True,
         related_name="led_projects",

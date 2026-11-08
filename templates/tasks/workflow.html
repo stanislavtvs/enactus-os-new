@@ -1,0 +1,79 @@
+<section class="card card-padded" id="task-workflow" aria-labelledby="task-workflow-heading" hidden>
+    <h2 id="task-workflow-heading">Распределение и проверка</h2>
+    <div class="task-fields task-workflow-columns">
+        <div>
+            <h3>Назначение</h3>
+            <p id="task-distribution-status" class="muted"></p>
+            <div class="task-actions task-gap">
+                <button class="button button-primary" id="task-route" type="button" aria-haspopup="dialog" hidden>Направить на распределение</button>
+                <button class="button button-primary" id="task-distribute" type="button" aria-haspopup="dialog" hidden>Назначить исполнителя</button>
+            </div>
+            <details id="task-distribution-history-panel" class="task-workflow-history" hidden>
+                <summary>История назначения</summary>
+                <ol id="task-distribution-history" class="task-workflow-list"></ol>
+            </details>
+        </div>
+        <div>
+            <h3>Проверка результата</h3>
+            <p id="task-review-route" class="muted"></p>
+            <p id="task-review-current" class="task-gap"></p>
+            <div id="task-review-materials" class="task-current-materials" hidden>
+                <h4>Результат на проверке</h4>
+                <div id="task-review-materials-content"></div>
+            </div>
+            <div class="task-actions task-gap">
+                <button class="button button-primary" id="task-review-submit" type="button" aria-haspopup="dialog" hidden>Отправить на проверку</button>
+                <button class="button button-primary" id="task-review-approve" type="button" aria-haspopup="dialog" hidden>Принять</button>
+                <button class="button collection-secondary" id="task-review-return" type="button" aria-haspopup="dialog" hidden>Вернуть на доработку</button>
+                <button class="button collection-secondary" id="task-review-policy-open" type="button" aria-haspopup="dialog" hidden>Настроить проверку</button>
+            </div>
+            <details id="task-review-history-panel" class="task-workflow-history" hidden>
+                <summary>История согласования</summary>
+                <ol id="task-review-history" class="task-workflow-list"></ol>
+            </details>
+        </div>
+    </div>
+</section>
+
+<dialog class="collection-dialog" id="task-workflow-dialog" aria-labelledby="task-workflow-dialog-heading">
+    <div class="collection-dialog-header">
+        <h2 id="task-workflow-dialog-heading"></h2>
+        <button class="button collection-secondary" type="button" data-dialog-close aria-label="Закрыть окно">
+            <svg class="icon" aria-hidden="true"><use href="#icon-close"/></svg>
+        </button>
+    </div>
+    <form id="task-workflow-form" class="form-stack" method="post">
+        <p class="muted" id="task-workflow-hint" hidden></p>
+        <div class="form-field" id="task-workflow-target-field" hidden>
+            <label for="task-workflow-target">Исполнитель</label>
+            <select id="task-workflow-target" name="assignee_id"></select>
+        </div>
+        <div class="form-field" id="task-workflow-comment-field" hidden>
+            <label id="task-workflow-comment-label" for="task-workflow-comment">Комментарий</label>
+            <textarea id="task-workflow-comment" name="comment" rows="4" maxlength="5000"></textarea>
+        </div>
+        <div class="form-field" id="task-workflow-links-field" hidden>
+            <label for="task-workflow-links">Ссылки на материалы</label>
+            <textarea id="task-workflow-links" name="links" rows="3" aria-describedby="task-workflow-links-hint"></textarea>
+            <p id="task-workflow-links-hint" class="form-hint">До 10 ссылок HTTP или HTTPS, по одной на строку.</p>
+        </div>
+        <div class="form-field" id="task-workflow-policy-field" hidden>
+            <label for="task-workflow-policy">Маршрут проверки</label>
+            <select id="task-workflow-policy" name="policy">
+                <option value="">Наследовать настройку</option>
+                <option value="project">Руководитель проекта</option>
+                <option value="department">Руководитель подразделения</option>
+                <option value="department_project">Подразделение, затем проект</option>
+            </select>
+        </div>
+        <div class="form-field" id="task-workflow-reviewer-field" hidden>
+            <label for="task-workflow-reviewer">Проверяющий задачи без проекта</label>
+            <select id="task-workflow-reviewer" name="reviewer_id"></select>
+        </div>
+        <p class="form-errors" id="task-workflow-error" role="alert"></p>
+        <div class="collection-dialog-actions">
+            <button class="button collection-secondary" type="button" data-dialog-close>Отмена</button>
+            <button class="button button-primary" id="task-workflow-save" type="submit">Подтвердить</button>
+        </div>
+    </form>
+</dialog>

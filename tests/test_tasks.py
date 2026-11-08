@@ -278,24 +278,23 @@ class TaskTests(TestCase):
         )
         self.assertEqual(self.client.get(url, {"task_id": self.foreign_task.pk}).status_code, 404)
 
-    def test_status_workflow_requires_primary_and_records_completion(self):
+    def test_status_workflow_requires_primary_and_does_not_bypass_review(self):
         self.enable_direct_assignment()
         self.client.force_login(self.owner)
         self.assertEqual(self.change_status(self.standalone, Task.Status.IN_PROGRESS).status_code, 409)
         self.assertEqual(self.change_assignee(self.standalone, self.assignee_member).status_code, 200)
         self.assertEqual(self.change_status(self.standalone, Task.Status.COMPLETED).status_code, 409)
-        for status in (
-            Task.Status.IN_PROGRESS, Task.Status.REVIEW, Task.Status.IN_PROGRESS,
-            Task.Status.REVIEW, Task.Status.COMPLETED,
-        ):
+        response = self.change_status(self.standalone, Task.Status.IN_PROGRESS)
+        self.assertEqual(response.status_code, 200, response.content)
+        self.assertEqual(response.json()["status"], Task.Status.IN_PROGRESS)
+        for status in (Task.Status.REVIEW, Task.Status.COMPLETED):
             with self.subTest(status=status):
                 response = self.change_status(self.standalone, status)
-                self.assertEqual(response.status_code, 200, response.content)
-                self.assertEqual(response.json()["status"], status)
+                self.assertEqual(response.status_code, 409, response.content)
         self.standalone.refresh_from_db()
-        self.assertEqual(self.standalone.status, Task.Status.COMPLETED)
-        self.assertIsNotNone(self.standalone.completed_at)
-        self.assertTrue(self.standalone.completed_at.utcoffset() is not None)
+        self.assertEqual(self.standalone.status, Task.Status.IN_PROGRESS)
+        self.assertIsNone(self.standalone.completed_at)
+        self.assertEqual(self.change_status(self.standalone, Task.Status.CANCELLED).status_code, 200)
         self.assertEqual(self.change_status(self.standalone, Task.Status.IN_PROGRESS).status_code, 409)
 
     def test_deactivation_unassigns_active_tasks_and_preserves_completed_history(self):

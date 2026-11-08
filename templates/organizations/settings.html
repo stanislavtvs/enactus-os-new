@@ -42,7 +42,7 @@
     </section>
     <section class="card card-padded onboarding" aria-labelledby="task-assignment-heading">
         <h2 id="task-assignment-heading">Назначение задач</h2>
-        <p>В режиме распределения через подразделение задачи пока создаются без исполнителя.</p>
+        <p>В режиме «Через подразделение» направьте задачу в очередь ответственного подразделения.</p>
         <form class="form-stack" method="post">
             {% csrf_token %}
             <input type="hidden" name="action" value="task_assignment_mode">
@@ -52,6 +52,19 @@
                 {% if task_assignment_form.task_mode.errors %}<div class="form-errors" role="alert">{{ task_assignment_form.task_mode.errors }}</div>{% endif %}
             </div>
             <button class="button button-primary" type="submit">Сохранить способ назначения</button>
+        </form>
+    </section>
+    <section class="card card-padded onboarding" aria-labelledby="task-review-heading">
+        <h2 id="task-review-heading">Проверка результатов</h2>
+        <form class="form-stack" method="post">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="task_review_policy">
+            <div class="form-field settings-field">
+                {{ review_form.review_policy.label_tag }}
+                {{ review_form.review_policy }}
+                {% if review_form.review_policy.errors %}<div class="form-errors" role="alert">{{ review_form.review_policy.errors }}</div>{% endif %}
+            </div>
+            <button class="button button-primary" type="submit">Сохранить маршрут проверки</button>
         </form>
     </section>
 {% endblock %}

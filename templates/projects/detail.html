@@ -108,4 +108,20 @@
             </p>
         </section>
     {% endif %}
+    {% if review_form %}
+        <details class="card card-padded project-page"{% if review_form.errors %} open{% endif %}>
+            <summary>Проверка задач проекта</summary>
+            <form class="form-stack" method="post">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="task_review_policy">
+                {{ review_form.non_field_errors }}
+                <div class="form-field">
+                    {{ review_form.review_policy.label_tag }}
+                    {{ review_form.review_policy }}
+                    {{ review_form.review_policy.errors }}
+                </div>
+                <button class="button button-primary" type="submit">Сохранить маршрут проверки</button>
+            </form>
+        </details>
+    {% endif %}
 {% endblock %}

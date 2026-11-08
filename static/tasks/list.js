@@ -6,12 +6,14 @@ const api = app.dataset.orgUrl;
 const token = app.querySelector('[name="csrfmiddlewaretoken"]').value;
 const fixedProjectId = app.dataset.projectId;
 const mine = app.dataset.mine === "true";
+const queue = app.dataset.queue;
 const search = document.querySelector("#tasks-search");
 const toolbar = document.querySelector("#tasks-toolbar");
 const statusFilter = document.querySelector("#tasks-status-filter");
 const projectFilter = document.querySelector("#tasks-project-filter");
 const departmentFilter = document.querySelector("#tasks-department-filter");
 const archiveFilter = document.querySelector("#tasks-archive-filter");
+const distributionFilter = document.querySelector("#tasks-distribution-filter");
 const results = document.querySelector("#tasks-list");
 const status = document.querySelector("#tasks-status");
 const errorBox = document.querySelector("#tasks-error");
@@ -41,6 +43,9 @@ function taskUrl(task) {
 
 function taskRow(task) {
     const badges = [];
+    if (task.distribution_pending) {
+        badges.push({text: "Ожидает распределения"});
+    }
     if (mine) {
         const me = options?.current_membership_id;
         if (task.assignee?.id === me) {
@@ -114,6 +119,8 @@ async function load() {
         project_id: fixedProjectId || projectFilter?.value,
         department_id: departmentFilter.value,
         mine: mine ? "true" : "",
+        queue,
+        distribution_pending: distributionFilter?.checked ? "true" : "",
         include_archived: archiveFilter.checked ? "true" : "",
     };
     for (const [key, value] of Object.entries(values)) {
@@ -176,6 +183,9 @@ function updateCreateDepartments() {
 }
 
 function setupCreate() {
+    if (queue) {
+        return;
+    }
     const projects = availableProjects();
     const standalone = options.can_create_standalone || options.departments.some(({can_create}) => can_create);
     createOpen.hidden = fixedProjectId
@@ -256,7 +266,7 @@ search.addEventListener("input", () => {
     page = 1;
     searchTimer = setTimeout(load, 250);
 });
-for (const filter of [statusFilter, projectFilter, departmentFilter, archiveFilter].filter(Boolean)) {
+for (const filter of [statusFilter, projectFilter, departmentFilter, archiveFilter, distributionFilter].filter(Boolean)) {
     filter.addEventListener("change", () => {
         clearTimeout(searchTimer);
         page = 1;

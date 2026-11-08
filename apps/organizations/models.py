@@ -6,6 +6,11 @@ ORGANIZATION_NAME_MAX_LENGTH = 200
 
 
 class Organization(models.Model):
+    class TaskReviewPolicy(models.TextChoices):
+        PROJECT = "project", "Руководитель проекта"
+        DEPARTMENT = "department", "Руководитель подразделения"
+        DEPARTMENT_PROJECT = "department_project", "Подразделение, затем проект"
+
     class TaskAssignmentMode(models.TextChoices):
         DEPARTMENT = "department", "Через подразделение"
         DIRECT = "direct", "Прямое назначение"
@@ -34,6 +39,11 @@ class Organization(models.Model):
         max_length=10,
         choices=TaskAssignmentMode,
         default=TaskAssignmentMode.DEPARTMENT,
+    )
+    task_review_policy = models.CharField(
+        max_length=18,
+        choices=TaskReviewPolicy,
+        default=TaskReviewPolicy.DEPARTMENT,
     )
     project_assignment_mode = models.CharField(
         max_length=10,

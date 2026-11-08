@@ -44,3 +44,17 @@
 .task-actions form { align-items: end; }
 .task-secondary { border-color: var(--line); color: var(--ink); background: var(--surface); }
 .task-secondary:hover { background: var(--subtle); }
+
+.task-workflow-columns { margin-top: var(--space-md); }
+.task-workflow-columns h3 { margin: 0 0 var(--space-xs); font-size: 1rem; }
+.task-workflow-columns .task-actions:not(:has(> :not([hidden]))) { display: none; }
+.task-workflow-history { margin-top: var(--space-md); }
+.task-workflow-history summary { cursor: pointer; font-weight: 650; }
+.task-workflow-list { display: grid; gap: var(--space-sm); padding-inline-start: var(--space-lg); }
+.task-workflow-list li { overflow-wrap: anywhere; }
+.task-review-version { padding: var(--space-xs) 0; }
+.task-review-comment { white-space: pre-wrap; margin-top: var(--space-xs); }
+.task-review-links { padding-inline-start: var(--space-lg); margin: var(--space-xs) 0; }
+.task-review-stages { padding-inline-start: var(--space-lg); margin: var(--space-xs) 0 0; }
+.task-current-materials { margin-block: var(--space-sm); padding: var(--space-sm); border-radius: 0.55rem; background: var(--subtle); overflow-wrap: anywhere; }
+.task-current-materials h4 { margin: 0 0 var(--space-xs); font-size: 0.9rem; }

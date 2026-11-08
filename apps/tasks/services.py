@@ -12,7 +12,7 @@ from apps.projects.services import _can_view as can_view_project
 from apps.projects.services import _context as project_context
 from apps.projects.services import visible_projects
 
-from .models import Task, TaskCollaborator
+from .models import Task, TaskCollaborator, TaskDistribution
 
 VIEW = "tasks.view"
 CREATE = "tasks.create"
@@ -23,8 +23,8 @@ ARCHIVE = "tasks.archive"
 
 TRANSITIONS = {
     Task.Status.PENDING: (Task.Status.IN_PROGRESS, Task.Status.CANCELLED),
-    Task.Status.IN_PROGRESS: (Task.Status.REVIEW, Task.Status.CANCELLED),
-    Task.Status.REVIEW: (Task.Status.IN_PROGRESS, Task.Status.COMPLETED, Task.Status.CANCELLED),
+    Task.Status.IN_PROGRESS: (Task.Status.CANCELLED,),
+    Task.Status.REVIEW: (Task.Status.CANCELLED,),
 }
 REQUIRES_ASSIGNEE = {Task.Status.IN_PROGRESS, Task.Status.REVIEW, Task.Status.COMPLETED}
 TERMINAL_STATUSES = {Task.Status.COMPLETED, Task.Status.CANCELLED}
@@ -53,14 +53,21 @@ def can_view_context(access, project=None, department=None):
 
 def _is_participant(access, task):
     member_id = access.membership.pk
-    return member_id in (task.created_by_id, task.assignee_id) or task._my_collaboration
+    if member_id in (task.created_by_id, task.assignee_id):
+        return True
+    if hasattr(task, "_my_collaboration"):
+        return task._my_collaboration
+    return task.collaborators.filter(organization_membership_id=member_id, is_active=True).exists()
 
 
 def _task_visible(access, task):
-    if access.membership is None or (
-        task.project_id is not None and not can_view_project(access, task.project)
-    ):
+    if access.membership is None:
         return False
+    if task.project_id is not None:
+        if hasattr(task, "_active_project_viewer"):
+            task.project._active_team_member = task._active_project_viewer
+        if not can_view_project(access, task.project):
+            return False
     return access.allows(VIEW, _context(task.project, task.department)) or _is_participant(access, task)
 
 
@@ -68,6 +75,7 @@ def _task_rows(access, *, lock=False):
     organization = access.organization
     rows = organization.tasks.select_related(
         "created_by__user", "assignee__user", "department", "project__responsible_department",
+        "reviewer__user", "organization",
     ).annotate(
         _my_collaboration=Exists(TaskCollaborator.objects.filter(
             organization=organization, task_id=OuterRef("pk"),
@@ -76,6 +84,13 @@ def _task_rows(access, *, lock=False):
         _active_project_assignee=Exists(ProjectMembership.objects.filter(
             organization=organization, project_id=OuterRef("project_id"),
             organization_membership_id=OuterRef("assignee_id"), is_active=True,
+        )),
+        _active_project_viewer=Exists(ProjectMembership.objects.filter(
+            organization=organization, project_id=OuterRef("project_id"),
+            organization_membership=access.membership, is_active=True,
+        )),
+        _distribution_pending=Exists(TaskDistribution.objects.filter(
+            organization=organization, task_id=OuterRef("pk"), status=TaskDistribution.Status.PENDING,
         )),
     )
     if lock:
@@ -126,9 +141,12 @@ def _task_access_filter(access, rows):
 
 def list_tasks(
     *, access, q="", status=None, project_id=None, department_id=None, mine=False,
-    include_archived=False, page=1, page_size=20,
+    include_archived=False, distribution_pending=None, queue_task_ids=None, page=1, page_size=20,
 ):
-    rows = _visible_rows(access)
+    rows = (
+        _visible_rows(access) if queue_task_ids is None
+        else _task_rows(access).filter(pk__in=queue_task_ids)
+    )
     if not include_archived:
         rows = rows.filter(is_archived=False)
     if q:
@@ -139,6 +157,8 @@ def list_tasks(
         rows = rows.filter(project_id=project_id)
     if department_id is not None:
         rows = rows.filter(department_id=department_id)
+    if distribution_pending is not None:
+        rows = rows.filter(_distribution_pending=distribution_pending)
     if mine:
         member_id = access.membership.pk
         rows = rows.filter(Q(assignee_id=member_id) | Q(_my_collaboration=True))
@@ -181,6 +201,8 @@ def _can_create(access, project, department):
 def _can_assign(access, task):
     return (
         task.status not in TERMINAL_STATUSES
+        and task.status != Task.Status.REVIEW
+        and not _has_pending_distribution(task)
         and access.organization.task_assignment_mode == Organization.TaskAssignmentMode.DIRECT
         and access.allows(ASSIGN, _context(task.project, task.department))
         and (task.project_id is None or task.project.lead_membership_id == access.membership.pk)
@@ -191,8 +213,14 @@ def _task_is_writable(task):
     return not task.is_archived and (task.project_id is None or not task.project.is_archived)
 
 
+def _has_pending_distribution(task):
+    if hasattr(task, "_distribution_pending"):
+        return task._distribution_pending
+    return task.distributions.filter(status=TaskDistribution.Status.PENDING).exists()
+
+
 def task_permissions(*, access, task):
-    writable = _task_is_writable(task)
+    writable = _task_is_writable(task) and _task_visible(access, task)
     context = _context(task.project, task.department)
     return {
         "update": writable and access.allows(UPDATE, context),
@@ -219,7 +247,10 @@ def _assignee_is_active(task):
 
 
 def allowed_statuses(*, access, task):
-    if not _task_is_writable(task) or not access.allows(CHANGE_STATUS, _context(task.project, task.department)):
+    if (
+        not _task_is_writable(task) or not _task_visible(access, task)
+        or not access.allows(CHANGE_STATUS, _context(task.project, task.department))
+    ):
         return []
     choices = TRANSITIONS.get(task.status, ())
     if not choices or _assignee_is_active(task):
@@ -324,6 +355,13 @@ def update_task(*, user, org_id, task_id, changes):
     access, task = _managed_task(user, org_id, task_id, UPDATE)
     fields = []
     if "department_id" in changes:
+        if changes["department_id"] != task.department_id:
+            if task.status == Task.Status.REVIEW:
+                raise TaskConflict("Нельзя менять подразделение во время проверки.")
+            if _has_pending_distribution(task):
+                if task.department_id is None or not task.department.is_archived:
+                    raise TaskConflict("Нельзя менять подразделение во время распределения.")
+                _cancel_distribution(task, access.membership)
         department = _active_department(access, changes["department_id"])
         target = _context(task.project, department)
         if not access.allows(UPDATE, target) or not (
@@ -344,10 +382,11 @@ def update_task(*, user, org_id, task_id, changes):
 
 @transaction.atomic
 def archive_task(*, user, org_id, task_id):
-    _, task = _managed_task(user, org_id, task_id, ARCHIVE, allow_archived=True)
+    access, task = _managed_task(user, org_id, task_id, ARCHIVE, allow_archived=True)
     if not task.is_archived:
         task.is_archived = True
         task.save(update_fields=["is_archived", "updated_at"])
+        _cancel_distribution(task, access.membership)
 
 
 def _assignable_task(user, org_id, task_id):
@@ -358,6 +397,10 @@ def _assignable_task(user, org_id, task_id):
         raise TaskConflict("Организация использует назначение через подразделение.")
     if task.status in TERMINAL_STATUSES:
         raise TaskConflict("У закрытой задачи нельзя менять исполнителей.")
+    if task.status == Task.Status.REVIEW:
+        raise TaskConflict("Нельзя менять исполнителей во время проверки.")
+    if _has_pending_distribution(task):
+        raise TaskConflict("Задачу ожидает распределение подразделением.")
     return access, task
 
 
@@ -374,6 +417,8 @@ def set_assignee(*, user, org_id, task_id, assignee_id):
     if assignee_id is None and task.assignee_id is not None and task.status in REQUIRES_ASSIGNEE:
         raise TaskConflict("У задачи в этом статусе должен оставаться основной исполнитель.")
     assignee = None if assignee_id is None else _candidate(access, task, assignee_id)
+    if assignee is not None and assignee.pk == task.reviewer_id:
+        raise TaskConflict("Назначенный проверяющий не может быть исполнителем этой задачи.")
     if assignee is not None and task.collaborators.filter(
         organization_membership=assignee, is_active=True,
     ).exists():
@@ -381,6 +426,13 @@ def set_assignee(*, user, org_id, task_id, assignee_id):
     if task.assignee_id != assignee_id:
         task.assignee = assignee
         task.save(update_fields=["assignee", "updated_at"])
+        task.distributions.create(
+            organization=access.organization, department=task.department,
+            requested_by=access.membership, resolved_by=access.membership,
+            mode=Organization.TaskAssignmentMode.DIRECT, assignee=assignee,
+            status=TaskDistribution.Status.ASSIGNED if assignee else TaskDistribution.Status.CLEARED,
+            resolved_at=timezone.now(),
+        )
     return task
 
 
@@ -407,7 +459,7 @@ def set_collaborator(*, user, org_id, task_id, membership_id, include):
 
 @transaction.atomic
 def set_status(*, user, org_id, task_id, status):
-    _, task = _managed_task(user, org_id, task_id, CHANGE_STATUS)
+    access, task = _managed_task(user, org_id, task_id, CHANGE_STATUS)
     if status == task.status:
         return task
     if status not in TRANSITIONS.get(task.status, ()):
@@ -417,4 +469,12 @@ def set_status(*, user, org_id, task_id, status):
     task.status = status
     task.completed_at = timezone.now() if status == Task.Status.COMPLETED else None
     task.save(update_fields=["status", "completed_at", "updated_at"])
+    if status == Task.Status.CANCELLED:
+        _cancel_distribution(task, access.membership)
     return task
+
+
+def _cancel_distribution(task, actor):
+    task.distributions.filter(status=TaskDistribution.Status.PENDING).update(
+        status=TaskDistribution.Status.CANCELLED, resolved_by=actor, resolved_at=timezone.now(),
+    )

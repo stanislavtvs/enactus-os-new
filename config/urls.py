@@ -26,7 +26,7 @@ from apps.projects.staffing_views import (
 )
 from apps.projects.views import organization_project, organization_projects
 
-from apps.tasks.views import organization_my_tasks, organization_task, organization_tasks, project_tasks
+from apps.tasks.views import organization_my_tasks, organization_task, organization_task_queue, organization_tasks, project_tasks
 
 from .api import api
 
@@ -80,6 +80,14 @@ urlpatterns = [
     path("organizations/project-invitations/", project_invitation_page, name="project-invitations"),
     path("organizations/<int:org_id>/tasks/", organization_tasks, name="organization-tasks"),
     path("organizations/<int:org_id>/tasks/mine/", organization_my_tasks, name="organization-my-tasks"),
+    path(
+        "organizations/<int:org_id>/tasks/distribution/", organization_task_queue,
+        {"queue": "distribution"}, name="organization-task-distribution",
+    ),
+    path(
+        "organizations/<int:org_id>/tasks/reviews/", organization_task_queue,
+        {"queue": "review"}, name="organization-task-reviews",
+    ),
     path("organizations/<int:org_id>/tasks/<int:task_id>/", organization_task, name="organization-task"),
     path("organizations/<int:org_id>/projects/<int:project_id>/tasks/", project_tasks, name="project-tasks"),
     path("admin/", admin.site.urls),

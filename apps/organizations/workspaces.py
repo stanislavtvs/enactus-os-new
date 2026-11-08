@@ -3,6 +3,8 @@ from django.urls import reverse
 from apps.access.policy import Access, Permission
 from apps.projects.services import can_open_projects
 from apps.projects.staffing import can_open_staffing
+from apps.tasks.distribution import can_open_distribution
+from apps.tasks.reviews import can_open_review_inbox
 from apps.tasks.services import can_open_tasks
 
 from .models import Organization
@@ -21,6 +23,8 @@ SCOPED_ROUTES = {
     "project-team",
     "organization-tasks",
     "organization-my-tasks",
+    "organization-task-distribution",
+    "organization-task-reviews",
     "organization-task",
     "project-tasks",
     "organization-staffing",
@@ -41,6 +45,8 @@ PAGE_TITLES = {
     "project-team": "Команда проекта",
     "organization-tasks": "Задачи",
     "organization-my-tasks": "Мои задачи",
+    "organization-task-distribution": "Распределение задач",
+    "organization-task-reviews": "Проверка задач",
     "organization-task": "Задача",
     "project-tasks": "Задачи проекта",
     "organization-staffing": "Запросы сотрудников",
@@ -105,6 +111,8 @@ def _workspace_links(request, workspace, route):
         ),
         ("organization-tasks", "Задачи", "org", can_open_tasks(access), ("organization-task", "project-tasks")),
         ("organization-my-tasks", "Мои задачи", "user", True, ()),
+        ("organization-task-distribution", "Распределение задач", "arrow", can_open_distribution(access), ()),
+        ("organization-task-reviews", "Проверка задач", "invite", can_open_review_inbox(access), ()),
         ("organization-access", "Роли и доступ", "org", True, ()),
         (
             "organization-manage", "Приглашения и заявки", "invite",

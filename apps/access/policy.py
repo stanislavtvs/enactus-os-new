@@ -31,6 +31,13 @@ class Permission(models.TextChoices):
     TASKS_ASSIGN = "tasks.assign", "Назначать исполнителей задач"
     TASKS_CHANGE_STATUS = "tasks.change_status", "Менять статус задач"
     TASKS_ARCHIVE = "tasks.archive", "Архивировать задачи"
+    TASKS_ROUTE = "tasks.route", "Направлять задачи на распределение"
+    TASKS_DISTRIBUTION_VIEW = "tasks.distribution.view", "Просматривать поручения на распределение"
+    TASKS_DISTRIBUTE = "tasks.distribute", "Распределять исполнителей задач"
+    TASKS_REVIEW_SUBMIT = "tasks.review.submit", "Отправлять результат задачи на проверку"
+    TASKS_REVIEW_APPROVE = "tasks.review.approve", "Принимать результат задачи"
+    TASKS_REVIEW_RETURN = "tasks.review.return", "Возвращать задачу на доработку"
+    TASKS_REVIEW_MANAGE = "tasks.review.manage", "Управлять правилами проверки задач"
     ROLES_READ = "roles.read", "Просматривать роли"
     ROLES_MANAGE = "roles.manage", "Управлять ролями"
 
