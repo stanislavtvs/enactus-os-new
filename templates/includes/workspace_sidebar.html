@@ -1,3 +1,4 @@
+{% load static %}
 <aside class="sidebar" id="workspace-sidebar" aria-label="Панель навигации">
     <div class="sidebar-header">
         <a class="brand" href="{% url 'home' %}">
@@ -42,6 +43,19 @@
             {% endfor %}
         </nav>
     {% endif %}
+
+    <nav class="side-nav side-group" aria-label="Уведомления">
+        <a href="{% url 'notifications' %}" id="notification-nav" title="Уведомления" aria-label="Уведомления"
+           data-count-url="{% url 'api-1.0.0:notification_count' %}"
+           {% if route == 'notifications' %}class="active" aria-current="page"{% endif %}>
+            <span class="notification-nav-icon">
+                <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M18 8a6 6 0 0 0-12 0c0 7-2 7-2 9h16c0-2-2-2-2-9M10 21h4"/></svg>
+                <span id="notification-nav-badge" class="notification-nav-badge" aria-hidden="true" hidden></span>
+            </span>
+            <span class="sidebar-text">Уведомления</span>
+        </a>
+    </nav>
+    <script type="module" src="{% static 'notifications/badge.js' %}"></script>
 
     <nav class="side-nav side-group" aria-label="Приглашения">
         <p class="side-label">Входящие</p>

@@ -12,6 +12,7 @@ from django.urls import reverse
 from django.utils import timezone
 
 from apps.access.services import organization_access
+from apps.notifications.producers import calendar_recipients, emit
 from apps.projects.models import ProjectMembership
 from apps.projects.services import _can_view as can_view_project
 from apps.projects.services import _context as project_context
@@ -479,6 +480,8 @@ def update_event(*, user, org_id, event_id, changes):
         event.save(update_fields=[*fields, "updated_at"])
         if schedule_changed:
             sync_recurrence_timezone(event)
+            emit(user, "calendar.rescheduled", "calendar_event", event, calendar_recipients(event),
+                 key=f"calendar.schedule:{event.pk}:{event.rsvp_revision}")
     return event_item(access, event)
 
 
@@ -494,6 +497,8 @@ def cancel_event(*, user, org_id, event_id):
         event.status = CalendarEvent.Status.CANCELLED
         event.cancelled_at = timezone.now()
         event.save(update_fields=["status", "cancelled_at", "updated_at"])
+        emit(user, "calendar.cancelled", "calendar_event", event, calendar_recipients(event),
+             key=f"calendar.cancel:{event.pk}")
     return event_item(access, event)
 
 

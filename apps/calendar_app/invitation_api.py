@@ -25,8 +25,9 @@ from .invitation_schemas import (
     RSVPAnswerInput,
     RSVPHistoryOutput,
 )
-from .schemas import RecordId
+from .schemas import RecordId, TimezoneName
 from .services import CalendarConflict, CalendarValidation
+from .upcoming import invitations_with_upcoming
 
 router = Router(auth=django_auth)
 INVITATION_CONFLICT_CONSTRAINTS = {
@@ -136,10 +137,16 @@ def invitation_history(request, response: HttpResponse, org_id: RecordId, event_
 
 
 @router.get("/calendar/invitations/", response=OwnInvitations, url_name="calendar_invitation_inbox")
-def own_invitations(request, response: HttpResponse, org_id: RecordId | None = None):
+def own_invitations(
+    request, response: HttpResponse, org_id: RecordId | None = None, timezone: TimezoneName = "UTC",
+):
     invitations = services.own_invitations(user=request.user, org_id=org_id)
     response["Cache-Control"] = "no-store"
-    return {"items": [services.own_invitation_data(invitation) for invitation in invitations]}
+    entries = _perform(invitations_with_upcoming, rows=invitations, timezone_name=timezone)
+    return {"items": [
+        {**services.own_invitation_data(invitation), "is_upcoming": upcoming}
+        for invitation, upcoming in entries
+    ]}
 
 
 @router.get("/calendar/invitations/{invitation_id}/", response=OwnInvitation, url_name="calendar_invitation_detail")

@@ -8,6 +8,7 @@
     <script src="{% static 'ui/theme.js' %}"></script>
     <script src="{% static 'ui/workspace.js' %}" defer></script>
     <link rel="stylesheet" href="{% static 'ui/system.css' %}">
+    {% if request.user.is_authenticated %}<link rel="stylesheet" href="{% static 'notifications/badge.css' %}">{% endif %}
     {% block extra_head %}{% endblock %}
 </head>
 <body>

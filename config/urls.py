@@ -4,6 +4,7 @@ from django.urls import path
 
 from apps.access.views import organization_access_page
 from apps.calendar_app.views import organization_calendar, organization_calendar_invitations
+from apps.notifications.views import notifications_page
 from apps.departments.views import department_invitations, department_members, department_structure
 from apps.organizations.onboarding_views import (
     organization_invitations,
@@ -40,6 +41,7 @@ from .api import api
 
 urlpatterns = [
     path("", home, name="home"),
+    path("notifications/", notifications_page, name="notifications"),
     path("organizations/", organization_list, name="organization-list"),
     path("organizations/switch/", organization_switch, name="organization-switch"),
     path("organizations/<int:org_id>/members/", organization_members, name="organization-members"),

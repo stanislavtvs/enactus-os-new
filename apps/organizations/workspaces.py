@@ -40,6 +40,7 @@ SCOPED_ROUTES = {
 }
 
 PAGE_TITLES = {
+    "notifications": "Уведомления",
     "home": "Мои организации",
     "organization-list": "Мои организации",
     "organization-detail": "Обзор",

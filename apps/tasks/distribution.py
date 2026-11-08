@@ -8,6 +8,7 @@ from django.utils import timezone
 
 from apps.access.services import organization_access
 from apps.departments.models import DepartmentMembership
+from apps.notifications.producers import emit, scoped_recipients
 from apps.organizations.models import Organization
 
 from .models import Task, TaskDistribution
@@ -100,10 +101,18 @@ def route_task(*, user, org_id, task_id):
     access, task = _managed_task(user, org_id, task_id, ROUTE)
     if not can_route(access, task):
         raise TaskConflict("Для направления нужна свободная ожидающая задача с действующим подразделением.")
-    return task.distributions.create(
+    distribution = task.distributions.create(
         organization=access.organization, department=task.department, requested_by=access.membership,
         mode=Organization.TaskAssignmentMode.DEPARTMENT,
     )
+    recipients = scoped_recipients(
+        access.organization, (DISTRIBUTE,), lambda candidate: can_distribute(candidate, distribution),
+    )
+    emit(
+        user, "task.distribution_requested", "task", task, recipients,
+        key=f"task-distribution:{distribution.pk}:requested",
+    )
+    return distribution
 
 
 def _pending_for_actor(access, task_id, *, lock=False):
@@ -167,4 +176,8 @@ def distribute_task(*, user, org_id, task_id, assignee_id):
     distribution.resolved_at = timezone.now()
     distribution.status = TaskDistribution.Status.ASSIGNED
     distribution.save(update_fields=["assignee", "resolved_by", "resolved_at", "status"])
+    emit(
+        user, "task.assigned", "task", task, {assignee.user_id, task.created_by.user_id},
+        key=f"task-distribution:{distribution.pk}:assigned",
+    )
     return distribution

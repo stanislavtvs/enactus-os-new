@@ -110,6 +110,8 @@ def _token_digest(token):
 
 @transaction.atomic
 def issue_invitation(*, actor, org_id, username):
+    from apps.notifications.producers import emit
+
     organization = _managed_organization(actor, org_id)
     _require_invitation_policy(organization)
     recipient = get_user_model().objects.filter(username=username, is_active=True).first()
@@ -144,6 +146,8 @@ def issue_invitation(*, actor, org_id, username):
         token_digest=_token_digest(raw_token),
         expires_at=now + INVITATION_LIFETIME,
     )
+    emit(actor, "organization.invited", "organization_invitation", invitation, [recipient.pk],
+         key=f"organization.invite:{invitation.pk}")
     return invitation, raw_token
 
 

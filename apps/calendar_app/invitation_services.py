@@ -11,6 +11,7 @@ from django.utils import timezone
 
 from apps.access.services import organization_access
 from apps.departments.services import active_department_members, department_actions
+from apps.notifications.producers import emit
 from apps.organizations.workspaces import can_view_organization_members
 from apps.projects.models import ProjectMembership
 from apps.projects.services import _context as project_context
@@ -327,6 +328,10 @@ def _send_snapshot(access, event, expanded, *, reinvite_revoked=False):
             for member_id in member_ids if member_id in by_recipient
         )
     CalendarInvitationSource.objects.bulk_create(snapshots, ignore_conflicts=True)
+    if invitations:
+        recipients = access.organization.memberships.filter(pk__in=eligible).values_list("user_id", flat=True)
+        emit(access.user, "calendar.invited", "calendar_event", event, recipients,
+             key=f"calendar.invite:{invitations[0].pk}")
     return {"total": len(selected), "created": len(invitations), "already_invited": len(active), "revoked": len(revoked)}
 
 

@@ -7,6 +7,7 @@ from django.utils import timezone
 
 from apps.access.policy import Access
 from apps.access.services import organization_access
+from apps.notifications.producers import emit, scoped_recipients
 from apps.organizations.models import Organization
 from apps.projects.services import _can_view as can_view_project
 from apps.projects.services import _context as project_context
@@ -283,6 +284,31 @@ def review_inbox(*, user, org_id):
     return [stage for stage in stages if _can_read_stage(access, stage)]
 
 
+def _review_recipients(organization, stage):
+    if stage is None:
+        return set()
+    membership_id = None
+    if stage.kind == TaskReviewStage.Kind.PROJECT:
+        membership_id = stage.task.project.lead_membership_id
+        if membership_id is None:
+            return set()
+    elif stage.kind == TaskReviewStage.Kind.EXPLICIT:
+        membership_id = stage.reviewer_id
+    return scoped_recipients(
+        organization, (APPROVE, RETURN), lambda candidate: _can_read_stage(candidate, stage),
+        membership_id=membership_id,
+    )
+
+
+def _notify_review_request(actor, task, stage, recipients):
+    if stage is not None:
+        emit(
+            actor, "review.requested", "task", task, recipients,
+            key=f"task-review-stage:{stage.pk}:requested",
+            data={"stage_id": stage.pk, "review_id": stage.submission_id},
+        )
+
+
 @transaction.atomic
 def submit_review(*, user, org_id, task_id, comment, links):
     access, task = _managed_task(user, org_id, task_id, SUBMIT)
@@ -309,6 +335,14 @@ def submit_review(*, user, org_id, task_id, comment, links):
     ])
     task.status = Task.Status.REVIEW
     task.save(update_fields=["status", "updated_at"])
+    stage = _current_stage(access, task)
+    reviewers = _review_recipients(access.organization, stage)
+    emit(
+        user, "review.submitted", "task", task, {task.created_by.user_id} - reviewers,
+        key=f"task-review-submission:{submission.pk}:submitted",
+        data={"review_id": submission.pk},
+    )
+    _notify_review_request(user, task, stage, reviewers)
     return submission
 
 
@@ -337,4 +371,12 @@ def decide_review(*, user, org_id, task_id, stage_id, outcome, comment):
         task.status = Task.Status.COMPLETED
         task.completed_at = timezone.now()
         task.save(update_fields=["status", "completed_at", "updated_at"])
+    emit(
+        user, f"review.{outcome}", "task", task, [stage.submission.submitted_by.user_id],
+        key=f"task-review-decision:{decision.pk}",
+        data={"stage_id": stage.pk, "review_id": stage.submission_id},
+    )
+    if outcome == TaskReviewDecision.Outcome.APPROVED and task.status == Task.Status.REVIEW:
+        next_stage = _current_stage(access, task)
+        _notify_review_request(user, task, next_stage, _review_recipients(access.organization, next_stage))
     return decision

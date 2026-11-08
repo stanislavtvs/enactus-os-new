@@ -177,6 +177,8 @@ def _resolve_invitation(invitation, status):
 
 @transaction.atomic
 def issue_invitation(*, user, org_id, department_id, organization_membership_id):
+    from apps.notifications.producers import emit
+
     department = _managed_department(user, org_id, department_id, "departments.invitations.manage", lock=True)
     organization = department.organization
     candidates = _active_org_members(organization)
@@ -197,10 +199,13 @@ def issue_invitation(*, user, org_id, department_id, organization_membership_id)
     if invitations.filter(status=DepartmentInvitation.Status.PENDING).exists():
         raise DepartmentConflict("Для этого пользователя уже есть действующее приглашение.")
 
-    return invitations.create(
+    invitation = invitations.create(
         organization=department.organization, department=department,
         organization_membership=target, invited_by=user,
     )
+    emit(user, "department.invited", "department_invitation", invitation, [target.user_id],
+         key=f"department.invite:{invitation.pk}")
+    return invitation
 
 
 @transaction.atomic

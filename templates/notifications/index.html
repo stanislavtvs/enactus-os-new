@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Уведомления — Enactus OS{% endblock %}
+{% block extra_head %}
+    <link rel="stylesheet" href="{% static 'ui/collection.css' %}">
+    <link rel="stylesheet" href="{% static 'notifications/inbox.css' %}">
+    <script type="module" src="{% static 'notifications/inbox.js' %}"></script>
+{% endblock %}
+
+{% block content %}
+    <section id="notification-center" data-api-url="{{ notification_api_url }}" aria-labelledby="notification-heading">
+        {% csrf_token %}
+        <header class="page-heading collection-header">
+            <div>
+                <h1 id="notification-heading" tabindex="-1">Уведомления</h1>
+                <p class="muted" id="notification-unread-count">Непрочитанные уведомления</p>
+            </div>
+            <button id="notification-read-all" class="button collection-secondary" type="button" disabled>Отметить все как прочитанные</button>
+        </header>
+
+        <noscript><p>Включите JavaScript, чтобы загрузить уведомления.</p></noscript>
+
+        <div class="notification-toolbar" aria-label="Фильтры уведомлений" role="group">
+            <div class="notification-mode" aria-label="Статус прочтения" role="group">
+                <button type="button" data-notification-mode="all" aria-pressed="true">Все</button>
+                <button type="button" data-notification-mode="unread" aria-pressed="false">Непрочитанные</button>
+            </div>
+            <div class="form-field">
+                <label for="notification-category">Категория</label>
+                <select id="notification-category">
+                    <option value="">Все категории</option>
+                </select>
+            </div>
+            <div class="form-field">
+                <label for="notification-organization">Организация</label>
+                <select id="notification-organization">
+                    <option value="">Все организации</option>
+                </select>
+            </div>
+        </div>
+
+        <p id="notification-feedback" class="collection-feedback" role="status"></p>
+        <p id="notification-status" class="muted notification-message" role="status"></p>
+        <p id="notification-error" class="form-errors notification-message" role="alert"></p>
+        <button id="notification-retry" class="button collection-secondary" type="button" hidden>Обновить уведомления</button>
+
+        <ol id="notification-list" class="notification-list" aria-label="Список уведомлений" role="list"></ol>
+        <nav id="notification-pagination" class="notification-pagination" aria-label="Страницы уведомлений" hidden>
+            <button id="notification-previous" class="button collection-secondary" type="button">Назад</button>
+            <span id="notification-page" class="muted"></span>
+            <button id="notification-next" class="button collection-secondary" type="button">Далее</button>
+        </nav>
+    </section>
+{% endblock %}

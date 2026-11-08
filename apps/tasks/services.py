@@ -7,6 +7,7 @@ from django.shortcuts import get_object_or_404
 from django.utils import timezone
 
 from apps.access.services import organization_access
+from apps.notifications.producers import emit
 from apps.organizations.models import Organization
 from apps.projects.models import ProjectMembership
 from apps.projects.services import _can_view as can_view_project
@@ -637,15 +638,20 @@ def set_assignee(*, user, org_id, task_id, assignee_id):
     ).exists():
         raise TaskConflict("Основной исполнитель уже назначен соисполнителем.")
     if task.assignee_id != assignee_id:
+        previous = task.assignee
         task.assignee = assignee
         task.save(update_fields=["assignee", "updated_at"])
-        task.distributions.create(
+        change = task.distributions.create(
             organization=access.organization, department=task.department,
             requested_by=access.membership, resolved_by=access.membership,
             mode=Organization.TaskAssignmentMode.DIRECT, assignee=assignee,
             status=TaskDistribution.Status.ASSIGNED if assignee else TaskDistribution.Status.CLEARED,
             resolved_at=timezone.now(),
         )
+        if previous is not None:
+            emit(user, "task.unassigned", "task", task, [previous.user_id], key=f"task-assignment:{change.pk}:removed")
+        if assignee is not None:
+            emit(user, "task.assigned", "task", task, [assignee.user_id], key=f"task-assignment:{change.pk}:added")
     return task
 
 
@@ -655,7 +661,8 @@ def set_collaborator(*, user, org_id, task_id, membership_id, include):
     member = get_object_or_404(access.organization.memberships, pk=membership_id)
     collaborators = task.collaborators.filter(organization=access.organization, organization_membership=member)
     if not include:
-        collaborators.filter(is_active=True).update(is_active=False)
+        if collaborators.filter(is_active=True).update(is_active=False):
+            emit(user, "task.unassigned", "task", task, [member.user_id])
         return
     _candidate(access, task, membership_id)
     if task.assignee_id == member.pk:
@@ -668,6 +675,7 @@ def set_collaborator(*, user, org_id, task_id, membership_id, include):
             raise TaskConflict("Этот участник уже назначен соисполнителем.")
         collaborator.is_active = True
         collaborator.save(update_fields=["is_active"])
+    emit(user, "task.collaborator_added", "task", task, [member.user_id])
 
 
 @transaction.atomic

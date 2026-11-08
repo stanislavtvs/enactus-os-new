@@ -1,0 +1,16 @@
+.notification-nav-icon { position: relative; display: inline-flex; flex: none; }
+.notification-nav-badge {
+    position: absolute;
+    inset-block-start: -.52rem;
+    inset-inline-start: .85rem;
+    min-width: 1.15rem;
+    padding-inline: .22rem;
+    border-radius: 1rem;
+    background: var(--amber);
+    color: var(--charcoal);
+    font-size: .65rem;
+    font-weight: 750;
+    line-height: 1.15rem;
+    text-align: center;
+}
+.notification-nav-icon + .sidebar-text { margin-inline-start: .2rem; }

@@ -13,6 +13,7 @@ from django.http import Http404
 from django.utils import timezone as django_timezone
 
 from apps.access.services import organization_access
+from apps.notifications.producers import calendar_recipients, emit
 
 from .models import CalendarEvent
 from .recurrence_models import CalendarOccurrenceException, CalendarRecurrenceRule
@@ -446,6 +447,7 @@ def set_recurrence(*, user, org_id, event_id, payload):
             existing.delete()
             event.recurrence_rule = None
             _bump_event_revision(event)
+            _notify_series_change(user, event)
         return {"recurrence": None, "can_edit": True}
 
     fields = _normalized_rule(event, payload)
@@ -457,12 +459,18 @@ def set_recurrence(*, user, org_id, event_id, payload):
     rule = install_rule(event, payload) if changed else existing
     if changed:
         _bump_event_revision(event)
+        _notify_series_change(user, event)
     return {"recurrence": rule_data(rule), "can_edit": can_edit_rule(access, event)}
 
 
 def _bump_event_revision(event):
     event.rsvp_revision += 1
     event.save(update_fields=["rsvp_revision", "updated_at"])
+
+
+def _notify_series_change(user, event):
+    emit(user, "calendar.rescheduled", "calendar_event", event, calendar_recipients(event),
+         key=f"calendar.schedule:{event.pk}:{event.rsvp_revision}")
 
 
 def _check_occurrence_version(occurrence, expected_version):
@@ -507,6 +515,9 @@ def update_occurrence(*, user, org_id, event_id, key, expected_version, changes)
             exception.version += 1
             exception.save(update_fields=[*fields, "version", "updated_at"])
         occurrence = _occurrence(event, _schedule(event), key, exception)
+        if "rsvp_revision" in fields:
+            emit(user, "calendar.occurrence_rescheduled", "calendar_event", event, calendar_recipients(event),
+                 key=f"calendar.move:{event.pk}:{key}:{exception.rsvp_revision}", data={"occurrence_key": key})
     return occurrence_item(access, event, occurrence)
 
 
@@ -523,6 +534,8 @@ def cancel_occurrence(*, user, org_id, event_id, key, expected_version):
     else:
         exception.version += 1
         exception.save(update_fields=["is_cancelled", "cancelled_at", "version", "updated_at"])
+    emit(user, "calendar.occurrence_cancelled", "calendar_event", event, calendar_recipients(event),
+         key=f"calendar.cancel-date:{event.pk}:{key}", data={"occurrence_key": key})
     return occurrence_item(access, event, _occurrence(event, _schedule(event), key, exception))
 
 
@@ -551,4 +564,6 @@ def stop_recurrence(*, user, org_id, event_id, from_date):
         raise CalendarConflict("После выбранной даты есть исключения или история. Выберите более позднюю дату.")
     rule.stopped_from = from_date
     rule.save(update_fields=["stopped_from", "updated_at"])
+    emit(user, "calendar.series_stopped", "calendar_event", event, calendar_recipients(event),
+         key=f"calendar.stop:{event.pk}:{from_date}")
     return {"recurrence": rule_data(rule), "can_edit": can_edit_rule(access, event)}

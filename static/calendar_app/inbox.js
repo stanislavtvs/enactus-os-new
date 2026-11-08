@@ -54,16 +54,8 @@ function unanswered(invitation) {
 function matches(invitation) {
     const {event, response} = invitation;
     switch (filter?.value) {
-        case "upcoming": {
-            const future = event.all_day
-                ? localDay(event.ends_at, event.timezone) > localDay(Date.now(), event.timezone)
-                : Date.parse(event.ends_at) > Date.now();
-            const today = localDay(Date.now(), event.timezone);
-            const rule = event.recurrence;
-            const ongoingSeries = invitation.is_recurring && (!rule?.until || rule.until >= today)
-                && (!rule?.stopped_from || rule.stopped_from > today);
-            return event.status === "scheduled" && (future || ongoingSeries);
-        }
+        case "upcoming":
+            return invitation.is_upcoming === true;
         case "pending":
             return unanswered(invitation);
         case "yes":
@@ -178,7 +170,9 @@ async function respond(invitation, response, actions) {
                 occurrencePanel.card.querySelector(`[data-rsvp="${response}"]`)?.focus();
             }
         } else {
-            invitations = invitations.map((row) => row.id === updated.id ? updated : row);
+            invitations = invitations.map((row) => row.id === updated.id
+                ? {...updated, is_upcoming: row.is_upcoming}
+                : row);
             render(message);
             (list.querySelector(`[data-invitation-id="${invitation.id}"] [data-rsvp="${response}"]`) ?? filter)?.focus();
             if (occurrencePanel?.select.value) {
@@ -352,7 +346,8 @@ async function load() {
     retry.hidden = true;
     list.setAttribute("aria-busy", "true");
     try {
-        const result = await request(invitationId ? `${api}${invitationId}/` : `${api}?org_id=${app.dataset.organizationId}`);
+        const params = new URLSearchParams({org_id: app.dataset.organizationId, timezone: zone});
+        const result = await request(invitationId ? `${api}${invitationId}/` : `${api}?${params}`);
         invitations = invitationId ? [result] : result.items;
         status.textContent = "";
         render();

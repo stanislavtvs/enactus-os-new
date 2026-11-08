@@ -9,6 +9,7 @@ from django.utils import timezone
 
 from apps.access.services import organization_access
 from apps.departments.models import DepartmentMembership
+from apps.notifications.producers import emit, scoped_recipients
 from apps.organizations.models import Organization
 
 from .models import ProjectMembership, StaffingAllocation, StaffingRequest
@@ -240,6 +241,10 @@ def submit_request(*, user, org_id, request_id):
     request.status = StaffingRequest.Status.SENT
     request.submitted_at = timezone.now()
     request.save(update_fields=["status", "submitted_at", "updated_at"])
+    recipients = scoped_recipients(
+        access.organization, (ALLOCATE_PERMISSION,), lambda candidate: can_allocate_request(candidate, request),
+    )
+    emit(user, "staffing.requested", "staffing_request", request, recipients, key=f"staffing.submit:{request.pk}")
     return _request_result(request)
 
 
@@ -272,7 +277,10 @@ def reject_request(*, user, org_id, request_id, comment):
     _require_department_side(access, request)
     _active_project(request.project)
     _open_request(request)
-    return _close_request(request, user, StaffingRequest.Status.REJECTED, comment=comment)
+    result = _close_request(request, user, StaffingRequest.Status.REJECTED, comment=comment)
+    emit(user, "staffing.rejected", "staffing_request", result, _project_request_recipients(result),
+         key=f"staffing.reject:{request.pk}")
+    return result
 
 
 def _branch_departments(organization, department_id):
@@ -369,6 +377,23 @@ def _refresh_request(request, actor=None):
     return _request_result(request)
 
 
+def _project_request_recipients(request):
+    recipients = {request.created_by_id}
+    if request.project.lead_membership_id is not None:
+        recipients.add(request.project.lead_membership.user_id)
+    return recipients
+
+
+def _notify_request_progress(user, request, allocation_id, *, already_notified=None):
+    kind = {
+        StaffingRequest.Status.PARTIAL: "staffing.partial",
+        StaffingRequest.Status.FULFILLED: "staffing.fulfilled",
+    }.get(request.status)
+    if kind is not None:
+        emit(user, kind, "staffing_request", request, _project_request_recipients(request) - {already_notified},
+             key=f"staffing.progress:{allocation_id}")
+
+
 def _activate_membership(request, member):
     membership, created = request.project.memberships.get_or_create(
         organization=request.organization,
@@ -413,17 +438,29 @@ def allocate(*, user, org_id, request_id, department_membership_ids):
     mode = access.organization.project_assignment_mode
     direct = mode == Organization.ProjectAssignmentMode.DIRECT
     now = timezone.now()
+    allocations = []
     for candidate in candidates:
         if direct:
             _activate_membership(request, candidate)
-        request.allocations.create(
+        allocation = request.allocations.create(
             organization=access.organization, project=request.project,
             organization_membership=candidate.organization_membership,
             department_membership=candidate, allocated_by=user, mode=mode,
             status=StaffingAllocation.Status.ACCEPTED if direct else StaffingAllocation.Status.PENDING,
             resolved_at=now if direct else None,
         )
-    return _refresh_request(request, user)
+        allocations.append(allocation)
+        if not direct:
+            emit(user, "project.invited", "project_invitation", allocation,
+                 [candidate.organization_membership.user_id], key=f"project.invite:{allocation.pk}")
+    result = _refresh_request(request, user)
+    if direct:
+        operation_id = allocations[0].pk
+        emit(user, "project.allocated", "project", request.project,
+             [candidate.organization_membership.user_id for candidate in candidates],
+             key=f"project.allocate:{operation_id}")
+        _notify_request_progress(user, result, operation_id)
+    return result
 
 
 def _resolve_allocation(allocation, status):
@@ -489,7 +526,12 @@ def respond_to_invitation(*, user, allocation_id, accept):
         _activate_membership(request, candidate)
         status = StaffingAllocation.Status.ACCEPTED
     _resolve_allocation(allocation, status)
-    _refresh_request(request)
+    result = _refresh_request(request)
+    kind = "project.invitation_accepted" if accept else "project.invitation_declined"
+    emit(user, kind, "staffing_request", result, [allocation.allocated_by_id],
+         key=f"project.invitation-response:{allocation.pk}")
+    if accept:
+        _notify_request_progress(user, result, allocation.pk, already_notified=allocation.allocated_by_id)
     return allocation
 
 

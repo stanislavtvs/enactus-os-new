@@ -139,6 +139,7 @@ class OwnInvitation(Schema):
     needs_reconfirmation: bool
     can_respond: bool
     is_recurring: bool = False
+    is_upcoming: bool | None = None
     event: InvitationEvent
 
 
