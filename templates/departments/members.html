@@ -23,9 +23,10 @@
     <div class="workspace-grid" id="department-members-app"
          data-department-url="{{ api_department_url }}"
          data-organization-url="{{ api_organization_url }}"
-         data-visibility="{{ directory_visibility }}"
+         data-show-others="{{ can_see_other_members|yesno:'true,false' }}"
          data-can-manage="{{ can_manage_members|yesno:'true,false' }}">
-        {% if can_manage_members or can_edit_directory_policy %}{% csrf_token %}{% endif %}
+        {{ manageable_department_ids|json_script:"manageable-department-ids" }}
+        {% if can_manage_members or can_edit_directory_policy or manageable_department_ids %}{% csrf_token %}{% endif %}
         <p class="muted department-message" id="department-members-status" role="status"></p>
         <p class="form-errors department-message" id="department-members-error" role="alert"></p>
         <button class="button department-secondary" id="department-members-retry" type="button" hidden>Обновить каталог</button>
@@ -59,7 +60,7 @@
                         <option value="branch">Все в этой ветке</option>
                         <option value="direct">Прямые участники</option>
                         <option value="descendants">Участники вложенных отделов</option>
-                        {% if can_manage_members or directory_visibility == 'organization' %}
+                        {% if can_see_other_members %}
                             <option value="others">Вне этой ветки</option>
                         {% endif %}
                     </select>

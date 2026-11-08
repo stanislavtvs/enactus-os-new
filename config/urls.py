@@ -4,6 +4,7 @@ from django.contrib.auth.views import LoginView, LogoutView
 from django.urls import path
 from django.views.generic import TemplateView
 
+from apps.access.views import organization_access_page
 from apps.departments.views import department_invitations, department_members, department_structure
 from apps.organizations.onboarding_views import (
     organization_invitations,
@@ -35,6 +36,11 @@ urlpatterns = [
         "organizations/department-invitations/",
         department_invitations,
         name="department-invitations",
+    ),
+    path(
+        "organizations/<int:org_id>/access/",
+        organization_access_page,
+        name="organization-access",
     ),
     path("admin/", admin.site.urls),
     path("accounts/login/", LoginView.as_view(), name="login"),

@@ -16,6 +16,12 @@ const cancelButton = document.querySelector("#department-cancel");
 const expanded = new Map();
 let departments = [];
 let editing = null;
+let original = null;
+let capabilities = {root: {}, nodes: {}};
+
+function allowed(action, id) {
+    return Boolean(id === null ? capabilities.root[action] : capabilities.nodes[id]?.[action]);
+}
 
 function element(tag, className, content) {
     const node = document.createElement(tag);
@@ -128,8 +134,17 @@ function renderTree() {
             membersLink.href = `${app.dataset.structureUrl}${item.id}/members/`;
             membersLink.setAttribute("aria-label", `Участники: ${item.name}`);
             actions.append(membersLink);
-            if (form) {
-                actions.append(action("Редактировать", item, edit), action("Архивировать ветку", item, archive));
+            if (form && allowed("create", item.id)) {
+                actions.append(action("Добавить дочернее", item, (parent) => {
+                    resetEditor(parent.id);
+                    form.elements.namedItem("name").focus();
+                }));
+            }
+            if (form && (allowed("update", item.id) || allowed("move", item.id))) {
+                actions.append(action(allowed("update", item.id) ? "Редактировать" : "Переместить", item, edit));
+            }
+            if (form && allowed("archive", item.id)) {
+                actions.append(action("Архивировать ветку", item, archive));
             }
             row.append(actions);
         }
@@ -154,9 +169,13 @@ function parentChoices(selected) {
     }
 
     const select = form.elements.namedItem("parent_id");
-    select.replaceChildren(new Option("Без родительского подразделения", ""));
+    select.replaceChildren();
+    const operation = editing === null ? "create" : "move";
+    if (selected === null || allowed(operation, null)) {
+        select.add(new Option("Без родительского подразделения", ""));
+    }
     for (const {item, depth} of walk(index)) {
-        if (!excluded.has(item.id)) {
+        if (!excluded.has(item.id) && (item.id === selected || allowed(operation, item.id))) {
             const prefix = depth ? `${"— ".repeat(Math.min(depth, 3))}` : "";
             select.add(new Option(prefix + item.name, String(item.id)));
         }
@@ -166,26 +185,36 @@ function parentChoices(selected) {
 
 function edit(item) {
     editing = item.id;
-    formHeading.textContent = "Редактирование подразделения";
+    original = item;
+    editor.hidden = false;
+    formHeading.textContent = allowed("update", item.id) ? "Редактирование подразделения" : "Перемещение подразделения";
     formError.textContent = "";
     form.elements.namedItem("name").value = item.name;
     form.elements.namedItem("description").value = item.description;
+    form.elements.namedItem("name").readOnly = !allowed("update", item.id);
+    form.elements.namedItem("description").readOnly = !allowed("update", item.id);
     parentChoices(item.parent_id);
+    form.elements.namedItem("parent_id").disabled = !allowed("move", item.id);
     saveButton.textContent = "Сохранить";
     cancelButton.hidden = false;
     form.elements.namedItem("name").focus();
 }
 
-function resetEditor() {
+function resetEditor(parentId = null) {
     if (!form) {
         return;
     }
     editing = null;
+    original = null;
+    editor.hidden = !allowed("create", parentId);
     formHeading.textContent = "Новое подразделение";
     form.elements.namedItem("name").value = "";
     form.elements.namedItem("description").value = "";
     formError.textContent = "";
-    parentChoices(null);
+    form.elements.namedItem("name").readOnly = false;
+    form.elements.namedItem("description").readOnly = false;
+    form.elements.namedItem("parent_id").disabled = false;
+    parentChoices(parentId);
     saveButton.textContent = "Создать";
     cancelButton.hidden = true;
 }
@@ -238,12 +267,17 @@ async function reload(message = "") {
     status.textContent = message || "Загружаем структуру…";
 
     try {
-        departments = await request("GET");
+        [departments, capabilities] = await Promise.all([
+            request("GET"),
+            form ? fetch(app.dataset.actionsUrl, {mode: "same-origin"}).then((response) => {
+                if (!response.ok) {
+                    throw new Error("Не удалось загрузить полномочия для структуры.");
+                }
+                return response.json();
+            }) : {root: {}, nodes: {}},
+        ]);
         renderTree();
         resetEditor();
-        if (editor) {
-            editor.hidden = false;
-        }
         status.textContent = message;
         return true;
     } catch (error) {
@@ -274,7 +308,7 @@ async function mutate(method, id, payload, message, errorElement) {
         return;
     }
     if (await reload(message)) {
-        const focusTarget = method === "DELETE" ? treeHeading : form.elements.namedItem("name");
+        const focusTarget = method === "DELETE" || editor.hidden ? treeHeading : form.elements.namedItem("name");
         focusTarget.focus();
     }
 }
@@ -297,21 +331,30 @@ if (form) {
             return;
         }
         const parent = form.elements.namedItem("parent_id").value;
-        const payload = {
-            name,
-            description: form.elements.namedItem("description").value,
-            parent_id: parent ? Number(parent) : null,
-        };
-        if (payload.parent_id !== null) {
-            expanded.set(payload.parent_id, true);
-        }
+        const parentId = parent ? Number(parent) : null;
+        const description = form.elements.namedItem("description").value;
         const creating = editing === null;
+        const payload = {};
+        if (creating || allowed("update", editing)) {
+            payload.name = name;
+            payload.description = description;
+        }
+        if (creating || (allowed("move", editing) && parentId !== original.parent_id)) {
+            payload.parent_id = parentId;
+        }
+        if (!Object.keys(payload).length) {
+            formError.textContent = "Выберите нового родителя.";
+            return;
+        }
+        if (parentId !== null) {
+            expanded.set(parentId, true);
+        }
         const message = creating ? "Подразделение создано." : "Изменения сохранены.";
         return mutate(creating ? "POST" : "PATCH", editing, payload, message, formError);
     });
     cancelButton.addEventListener("click", () => {
         resetEditor();
-        form.elements.namedItem("name").focus();
+        (editor.hidden ? treeHeading : form.elements.namedItem("name")).focus();
     });
 }
 

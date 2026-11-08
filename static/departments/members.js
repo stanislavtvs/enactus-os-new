@@ -5,6 +5,7 @@ const departmentUrl = app.dataset.departmentUrl;
 const organizationUrl = app.dataset.organizationUrl;
 const token = app.querySelector('[name="csrfmiddlewaretoken"]')?.value;
 const canManage = app.dataset.canManage === "true";
+const manageableDepartmentIds = new Set(JSON.parse(document.querySelector("#manageable-department-ids").textContent));
 const list = document.querySelector("#department-members-list");
 const history = document.querySelector("#department-invitation-history");
 const historyEmpty = document.querySelector("#department-history-empty");
@@ -60,7 +61,7 @@ function personRow(person, outside) {
         const path = membership.path.join(" → ");
         const label = membership.is_direct ? "Прямое членство" : "Во вложенном подразделении";
         const entry = element("li", "", `${label}: ${path}`);
-        if (canManage && !outside) {
+        if (manageableDepartmentIds.has(membership.department_id) && !outside) {
             entry.append(action("Исключить", `Исключить ${person.username} из ${path}`,
                 () => removeMembership(person, membership)));
         }
@@ -130,7 +131,7 @@ async function load(message = "") {
     errorBox.textContent = "";
     retry.hidden = true;
     try {
-        const showOthers = canManage || app.dataset.visibility === "organization";
+        const showOthers = app.dataset.showOthers === "true";
         [branch, others, invitations] = await Promise.all([
             request(`${departmentUrl}members/?scope=branch`),
             showOthers ? request(`${departmentUrl}members/?scope=others`) : [],
@@ -156,7 +157,7 @@ async function load(message = "") {
     }
 }
 
-async function mutate(url, method, payload, message) {
+async function mutate(url, method, payload, message, reloadPage = false) {
     setBusy(true);
     errorBox.textContent = "";
     status.textContent = "";
@@ -166,6 +167,10 @@ async function mutate(url, method, payload, message) {
         errorBox.textContent = errorMessage(error);
         retry.hidden = false;
         setBusy(false);
+        return;
+    }
+    if (reloadPage) {
+        window.location.reload();
         return;
     }
     if (await load(message)) {
@@ -180,7 +185,7 @@ retry.addEventListener("click", () => load());
 policyForm?.addEventListener("submit", (event) => {
     event.preventDefault();
     const visibility = policyForm.elements.namedItem("visibility").value;
-    return mutate(`${organizationUrl}department-directory-policy/`, "PATCH", {visibility}, "Видимость каталога обновлена.");
+    return mutate(`${organizationUrl}department-directory-policy/`, "PATCH", {visibility}, "Видимость каталога обновлена.", true);
 });
 
 load();

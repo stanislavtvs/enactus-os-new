@@ -1,0 +1,135 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Роли и доступ — {{ organization.name }} — Enactus OS{% endblock %}
+{% block extra_head %}
+    <link rel="stylesheet" href="{% static 'access/access.css' %}">
+    <script type="module" src="{% static 'access/access.js' %}"></script>
+{% endblock %}
+
+{% block content %}
+    <nav class="breadcrumbs" aria-label="Путь к странице">
+        <a href="{% url 'organization-list' %}">Мои организации</a>
+        <span aria-hidden="true"> / </span>
+        <a href="{% url 'organization-detail' org_id=organization.id %}">{{ organization.name }}</a>
+    </nav>
+    <header class="page-heading">
+        <p class="eyebrow">{{ organization.name }}</p>
+        <h1>Роли и доступ</h1>
+        <p>Проверьте свои разрешения в организации или выбранном подразделении.</p>
+    </header>
+
+    <noscript><p>Включите JavaScript, чтобы загрузить сведения о доступе.</p></noscript>
+    <div id="organization-access-app" class="workspace-grid" data-api-url="{{ access_api_url }}"
+         data-owner="{{ is_owner|yesno:'true,false' }}" data-username="{{ request.user.get_username }}">
+        {% if can_manage_roles %}{% csrf_token %}{% endif %}
+
+        <section class="card card-padded" aria-labelledby="access-effective-heading">
+            <h2 id="access-effective-heading">Мои разрешения</h2>
+            <div class="form-stack" id="access-effective-context" hidden>
+                <div class="form-field access-field">
+                    <label for="access-effective-department">Область проверки</label>
+                    <select id="access-effective-department">
+                        <option value="">Организация</option>
+                    </select>
+                </div>
+            </div>
+            <p class="muted access-message" id="access-effective-status" role="status"></p>
+            <p class="form-errors access-message" id="access-effective-error" role="alert"></p>
+            <button class="button access-secondary" id="access-effective-retry" type="button" hidden>Обновить разрешения</button>
+            <ul class="access-permission-list" id="access-effective-list"></ul>
+        </section>
+
+        {% if can_view_roles %}
+            <section class="card card-padded" id="access-admin" aria-labelledby="access-roles-heading">
+                <h2 id="access-roles-heading" tabindex="-1">Роли организации</h2>
+                <p class="muted">Роль объединяет разрешения. Права для дочерних подразделений включаются для каждого разрешения отдельно.</p>
+                {% if can_manage_roles and not is_owner %}
+                    <p class="muted access-message">Вы можете делегировать только доступные вам права. Менять собственные назначения, передавать право управления ролями и редактировать уже назначенные роли может только владелец.</p>
+                {% endif %}
+                <p class="muted access-message" id="access-admin-status" role="status"></p>
+                <p class="form-errors access-message" id="access-admin-error" role="alert"></p>
+                <button class="button access-secondary" id="access-admin-retry" type="button" hidden>Обновить роли и назначения</button>
+                <ul class="access-records" id="access-role-list" role="list"></ul>
+                {% if can_manage_roles %}
+                    <form method="post" class="form-stack" id="access-role-form" hidden>
+                        <h3 id="access-role-form-heading">Новая роль</h3>
+                        <div class="access-role-preset" id="access-role-preset">
+                            <div class="form-field access-field">
+                                <label for="access-role-template">Стартовый шаблон</label>
+                                <select id="access-role-template">
+                                    <option value="coordinator">Координатор подразделения</option>
+                                    <option value="observer">Наблюдатель ролей</option>
+                                </select>
+                            </div>
+                            <button class="button access-secondary" id="access-fill-template" type="button">Заполнить по шаблону</button>
+                            <p class="form-hint">Шаблон подставит название и права в форму. Проверьте их перед сохранением.</p>
+                        </div>
+                        <div class="form-field access-field">
+                            <label for="access-role-name">Название роли</label>
+                            <input id="access-role-name" name="name" required>
+                        </div>
+                        <fieldset class="access-options">
+                            <legend>Разрешения роли</legend>
+                            <div id="access-permission-options"></div>
+                        </fieldset>
+                        <div class="access-actions">
+                            <button class="button button-primary" id="access-role-save" type="submit">Создать роль</button>
+                            <button class="button access-secondary" id="access-role-cancel" type="button" hidden>Отмена</button>
+                        </div>
+                    </form>
+                {% endif %}
+            </section>
+
+            <section class="card card-padded" aria-labelledby="access-assignments-heading">
+                <h2 id="access-assignments-heading">Назначения ролей</h2>
+                <p class="muted">Для назначения в подразделении выберите фактическое членство участника.</p>
+                <ul class="access-records" id="access-assignment-list" role="list"></ul>
+                {% if can_manage_roles %}
+                    <form method="post" class="form-stack" id="access-assignment-form" hidden>
+                        <div class="access-fields-grid">
+                            <div class="form-field access-field">
+                                <label for="access-assignment-role">Роль</label>
+                                <select id="access-assignment-role" name="role_id" required></select>
+                            </div>
+                            <div class="form-field access-field">
+                                <label for="access-assignment-subject">Участник</label>
+                                <select id="access-assignment-subject" name="organization_membership_id" required></select>
+                            </div>
+                            <div class="form-field access-field">
+                                <label for="access-assignment-scope">Область назначения</label>
+                                <select id="access-assignment-scope" name="department_membership_id"></select>
+                            </div>
+                        </div>
+                        <button class="button button-primary" type="submit">Назначить роль</button>
+                    </form>
+                {% endif %}
+            </section>
+
+            <section class="card card-padded" aria-labelledby="access-positions-heading">
+                <h2 id="access-positions-heading">Должности</h2>
+                <p class="muted">Должность отображает обязанности участника и сама по себе не выдаёт разрешений.</p>
+                <ul class="access-records" id="access-position-list" role="list"></ul>
+                {% if can_manage_roles %}
+                    <form method="post" class="form-stack" id="access-position-form" hidden>
+                        <div class="access-fields-grid">
+                            <div class="form-field access-field">
+                                <label for="access-position-title">Название должности</label>
+                                <input id="access-position-title" name="title" required>
+                            </div>
+                            <div class="form-field access-field">
+                                <label for="access-position-subject">Участник</label>
+                                <select id="access-position-subject" name="organization_membership_id" required></select>
+                            </div>
+                            <div class="form-field access-field">
+                                <label for="access-position-scope">Область должности</label>
+                                <select id="access-position-scope" name="department_membership_id"></select>
+                            </div>
+                        </div>
+                        <button class="button button-primary" type="submit">Добавить должность</button>
+                    </form>
+                {% endif %}
+            </section>
+        {% endif %}
+    </div>
+{% endblock %}

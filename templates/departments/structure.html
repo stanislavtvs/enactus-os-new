@@ -21,7 +21,7 @@
 
     <noscript><p>Включите JavaScript, чтобы загрузить структуру организации.</p></noscript>
     <div id="department-app" class="workspace-grid{% if can_manage_departments %} workspace-grid-with-form{% endif %}"
-         data-api-url="{{ department_api_url }}" data-structure-url="{% url 'organization-departments' org_id=organization.id %}">
+         data-api-url="{{ department_api_url }}" data-actions-url="{{ department_actions_url }}" data-structure-url="{% url 'organization-departments' org_id=organization.id %}">
         <section class="card card-padded department-panel" aria-labelledby="department-tree-heading">
             <div class="department-toolbar">
                 <h2 id="department-tree-heading" tabindex="-1">Подразделения</h2>

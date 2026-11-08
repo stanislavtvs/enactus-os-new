@@ -9,6 +9,8 @@ from django.http import Http404
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 
+from apps.access.policy import Access
+
 from .models import JoinRequest, Organization, OrganizationInvitation, OrganizationMembership
 
 INVITATION_LIFETIME = timedelta(days=7)
@@ -37,10 +39,7 @@ def _active_membership(user, organization):
 
 
 def can_manage_members(user, organization):
-    membership = _active_membership(user, organization)
-    return membership is not None and (
-        user.pk == organization.owner_id or membership.can_manage_members
-    )
+    return Access(user, organization).allows("organizations.onboarding.manage")
 
 
 def _locked_organization(org_id):
@@ -54,7 +53,7 @@ def _managed_organization(actor, org_id, *, owner_only=False):
         raise Http404
 
     is_owner = actor.pk == organization.owner_id
-    if not is_owner and (owner_only or not membership.can_manage_members):
+    if not is_owner and (owner_only or not can_manage_members(actor, organization)):
         raise PermissionDenied
     return organization
 

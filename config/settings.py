@@ -20,6 +20,7 @@ INSTALLED_APPS = [
     "apps.accounts.apps.AccountsConfig",
     "apps.organizations.apps.OrganizationsConfig",
     "apps.departments.apps.DepartmentsConfig",
+    "apps.access.apps.AccessConfig",
 ]
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",

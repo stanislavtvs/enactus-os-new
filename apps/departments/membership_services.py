@@ -6,7 +6,7 @@ from django.http import Http404
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 
-from apps.organizations.onboarding import can_manage_members
+from apps.access.policy import Access
 from apps.organizations.services import visible_organizations
 
 from .models import Department, DepartmentInvitation, DepartmentMembership
@@ -27,10 +27,10 @@ def _department(organization, department_id, *, lock=False):
     return get_object_or_404(departments, pk=department_id)
 
 
-def _managed_department(user, org_id, department_id, *, lock=False):
+def _managed_department(user, org_id, department_id, action, *, lock=False):
     organization = _organization(user, org_id, lock=lock)
     department = _department(organization, department_id, lock=lock)
-    if not can_manage_members(user, organization):
+    if not Access(user, organization).allows(action, department):
         raise PermissionDenied
     return department
 
@@ -79,12 +79,14 @@ def _directory_context(user, org_id, department_id):
     if department_id not in nodes:
         raise Http404
     branch_members = _active_branch_members(department, _branch_ids(department_id, children))
+    access = Access(user, organization)
     can_see_others = (
         organization.department_directory_visibility
         == organization.DepartmentDirectoryVisibility.ORGANIZATION
-        or can_manage_members(user, organization)
+        or access.allows("departments.directory.read")
     )
-    if not can_see_others and not branch_members.filter(organization_membership__user=user).exists():
+    can_read_branch = can_see_others or access.allows("departments.directory.read", department)
+    if not can_read_branch and not branch_members.filter(organization_membership__user=user).exists():
         raise Http404
     return department, nodes, branch_members, can_see_others
 
@@ -167,7 +169,7 @@ def _department_invitations(department):
 
 
 def managed_invitations(*, user, org_id, department_id):
-    department = _managed_department(user, org_id, department_id)
+    department = _managed_department(user, org_id, department_id, "departments.invitations.manage")
     return _department_invitations(department).order_by("-id")
 
 
@@ -179,9 +181,18 @@ def _resolve_invitation(invitation, status):
 
 @transaction.atomic
 def issue_invitation(*, user, org_id, department_id, organization_membership_id):
-    department = _managed_department(user, org_id, department_id, lock=True)
+    department = _managed_department(user, org_id, department_id, "departments.invitations.manage", lock=True)
+    organization = department.organization
+    candidates = _active_org_members(organization)
+    access = Access(user, organization)
+    if (
+        organization.department_directory_visibility != organization.DepartmentDirectoryVisibility.ORGANIZATION
+        and not access.allows("departments.directory.read")
+    ):
+        _, _, branch_members, _ = _directory_context(user, org_id, department_id)
+        candidates = candidates.filter(pk__in=branch_members.values("organization_membership_id"))
     target = get_object_or_404(
-        _active_org_members(department.organization).select_for_update(of=("self",)),
+        candidates.select_for_update(of=("self",)),
         pk=organization_membership_id,
     )
     if department.memberships.filter(organization_membership=target, is_active=True).exists():
@@ -198,7 +209,7 @@ def issue_invitation(*, user, org_id, department_id, organization_membership_id)
 
 @transaction.atomic
 def revoke_invitation(*, user, org_id, department_id, invitation_id):
-    department = _managed_department(user, org_id, department_id, lock=True)
+    department = _managed_department(user, org_id, department_id, "departments.invitations.manage", lock=True)
     invitation = get_object_or_404(
         _department_invitations(department),
         pk=invitation_id,
@@ -257,7 +268,9 @@ def respond_to_invitation(*, user, invitation_id, accept):
 
 @transaction.atomic
 def end_membership(*, user, org_id, department_id, membership_id):
-    department = _managed_department(user, org_id, department_id, lock=True)
+    department = _managed_department(
+        user, org_id, department_id, "departments.members.manage", lock=True,
+    )
     membership = get_object_or_404(
         department.memberships,
         pk=membership_id,

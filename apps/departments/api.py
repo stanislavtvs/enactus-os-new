@@ -96,3 +96,13 @@ def archive_department(request, org_id: RecordId, department_id: RecordId):
         services.archive_department, user=request.user, org_id=org_id, department_id=department_id
     )
     return 204, None
+
+
+class DepartmentActionsOutput(Schema):
+    root: dict[str, bool]
+    nodes: dict[int, dict[str, bool]]
+
+
+@router.get("/{org_id}/department-actions/", response=DepartmentActionsOutput, url_name="department_actions")
+def get_department_actions(request, org_id: RecordId):
+    return services.department_actions(user=request.user, org_id=org_id)
