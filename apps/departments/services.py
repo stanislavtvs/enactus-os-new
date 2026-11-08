@@ -6,9 +6,12 @@ from django.shortcuts import get_object_or_404
 from django.utils import timezone
 
 from apps.access.policy import Access
+from apps.organizations.models import Organization
 from apps.organizations.services import visible_organizations
 
-from .models import Department
+from .models import DepartmentMembership
+
+DEPARTMENT_MUTATIONS = ("create", "update", "move", "archive")
 
 
 class DepartmentConflict(Exception):
@@ -20,6 +23,34 @@ def visible_departments(*, user, org_id):
     if not Access(user, organization).allows("departments.read"):
         raise PermissionDenied
     return organization.departments.order_by("id")
+
+
+def active_department_members(organization):
+    return DepartmentMembership.objects.filter(
+        organization=organization,
+        department__is_archived=False,
+        is_active=True,
+        organization_membership__is_active=True,
+        organization_membership__user__is_active=True,
+    )
+
+
+def can_view_directory_others(access):
+    return access.membership is not None and (
+        access.organization.department_directory_visibility
+        == Organization.DepartmentDirectoryVisibility.ORGANIZATION
+        or access.allows("departments.directory.read")
+    )
+
+
+def can_view_department_directory(access, department):
+    return (
+        department.organization_id == access.organization.pk
+        and not department.is_archived
+        and (
+            can_view_directory_others(access) or access.allows("departments.directory.read", department)
+        )
+    )
 
 
 def _managed_departments(user, org_id):
@@ -119,10 +150,24 @@ def department_actions(*, user, org_id):
     organization = get_object_or_404(visible_organizations(user), pk=org_id)
     access = Access(user, organization)
     nodes = {node.pk: node for node in organization.departments.filter(is_archived=False)}
+    actor_branches = set()
+    if not can_view_directory_others(access):
+        direct_ids = active_department_members(organization).filter(
+            organization_membership=access.membership,
+        ).values_list("department_id", flat=True)
+        for node_id in direct_ids:
+            while node_id in nodes and node_id not in actor_branches:
+                actor_branches.add(node_id)
+                node_id = nodes[node_id].parent_id
     actions = {
         node.pk: {
-            action: access.allows(f"departments.{action}", node)
-            for action in ("create", "update", "move", "archive")
+            **{
+                action: access.allows(f"departments.{action}", node)
+                for action in DEPARTMENT_MUTATIONS
+            },
+            "open_members": (
+                node.pk in actor_branches or can_view_department_directory(access, node)
+            ),
         }
         for node in nodes.values()
     }

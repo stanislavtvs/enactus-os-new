@@ -3,7 +3,8 @@
 
 {% block title %}Подразделения — {{ organization.name }} — Enactus OS{% endblock %}
 {% block extra_head %}
-    <link rel="stylesheet" href="{% static 'departments/departments.css' %}">
+    <link rel="stylesheet" href="{% static 'ui/collection.css' %}">
+    <link rel="stylesheet" href="{% static 'departments/structure.css' %}">
     <script type="module" src="{% static 'departments/departments.js' %}"></script>
 {% endblock %}
 
@@ -13,55 +14,77 @@
         <span aria-hidden="true"> / </span>
         <a href="{% url 'organization-detail' organization.id %}">{{ organization.name }}</a>
     </nav>
-    <header class="page-heading">
-        <p class="eyebrow">{{ organization.name }}</p>
-        <h1>Структура организации</h1>
-        <p>Откройте подразделение, чтобы посмотреть его участников. Доступ к каталогу зависит от правил организации.</p>
-    </header>
 
-    <noscript><p>Включите JavaScript, чтобы загрузить структуру организации.</p></noscript>
-    <div id="department-app" class="workspace-grid{% if can_manage_departments %} workspace-grid-with-form{% endif %}"
-         data-api-url="{{ department_api_url }}" data-actions-url="{{ department_actions_url }}" data-structure-url="{% url 'organization-departments' org_id=organization.id %}">
-        <section class="card card-padded department-panel" aria-labelledby="department-tree-heading">
-            <div class="department-toolbar">
-                <h2 id="department-tree-heading" tabindex="-1">Подразделения</h2>
-                <label class="department-filter" hidden>
-                    <input type="checkbox" id="department-show-archived">
-                    Показывать архивные
-                </label>
+    <div id="department-app" data-api-url="{{ department_api_url }}" data-actions-url="{{ department_actions_url }}"
+         data-structure-url="{% url 'organization-departments' org_id=organization.id %}">
+        <header class="page-heading collection-header">
+            <div>
+                <p class="eyebrow">{{ organization.name }}</p>
+                <h1 id="department-tree-heading" tabindex="-1">Структура организации</h1>
             </div>
-            <p class="muted department-message" id="department-status" role="status"></p>
-            <p class="form-errors department-message" id="department-load-error" role="alert"></p>
-            <button class="button department-secondary" id="department-retry" type="button" hidden>Обновить структуру</button>
-            <div id="department-tree"></div>
-        </section>
+            {% if can_manage_departments %}
+                <button class="button button-primary" type="button" id="department-create-open" aria-haspopup="dialog"
+                        aria-controls="department-editor" hidden>
+                    <svg class="collection-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+                    Новое подразделение
+                </button>
+            {% endif %}
+        </header>
+        <noscript><p>Включите JavaScript, чтобы загрузить структуру организации.</p></noscript>
+
+        <div class="collection-toolbar" id="department-toolbar" hidden>
+            <div class="form-field collection-search">
+                <label for="department-search" class="visually-hidden">Поиск подразделений по названию</label>
+                <input type="search" id="department-search" placeholder="Поиск по названию">
+            </div>
+            <details class="collection-filters" id="department-filters">
+                <summary class="button collection-secondary">
+                    <svg class="collection-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 7h14M8 12h8m-5 5h2"/></svg>
+                    Фильтры
+                </summary>
+                <div class="collection-filter-fields">
+                    <label class="structure-filter"><input type="checkbox" id="department-show-archived"> Показывать архивные</label>
+                </div>
+            </details>
+        </div>
+
+        <p class="collection-feedback" id="department-feedback" role="status"></p>
+        <p class="muted" id="department-status" role="status"></p>
+        <p class="form-errors" id="department-load-error" role="alert"></p>
+        <button class="button collection-secondary" id="department-retry" type="button" hidden>Обновить структуру</button>
+        <p class="muted" id="department-results" role="status"></p>
+        <div id="department-tree" aria-labelledby="department-tree-heading"></div>
 
         {% if can_manage_departments %}
-            <section class="card card-padded department-panel" id="department-editor" aria-labelledby="department-form-heading" hidden>
-                <h2 id="department-form-heading">Новое подразделение</h2>
+            <dialog class="collection-dialog" id="department-editor" aria-labelledby="department-form-heading">
+                <div class="collection-dialog-header">
+                    <h2 id="department-form-heading">Новое подразделение</h2>
+                    <button class="button collection-secondary" type="button" data-dialog-close aria-label="Закрыть форму">
+                        <svg class="icon" aria-hidden="true"><use href="#icon-close"/></svg>
+                    </button>
+                </div>
                 <form id="department-form" class="form-stack" method="post">
                     {% csrf_token %}
-                    <fieldset class="department-fields">
-                        <div class="form-field">
-                            <label for="department-name">Название</label>
-                            <input id="department-name" name="name" required>
-                        </div>
-                        <div class="form-field">
-                            <label for="department-parent">Родительское подразделение</label>
-                            <select id="department-parent" name="parent_id"></select>
-                        </div>
-                        <div class="form-field">
-                            <label for="department-description">Описание</label>
-                            <textarea id="department-description" name="description" rows="3"></textarea>
-                        </div>
-                        <p id="department-form-error" class="form-errors" role="alert"></p>
-                        <div class="department-actions">
-                            <button class="button button-primary" type="submit" id="department-save">Создать</button>
-                            <button class="button department-secondary" type="button" id="department-cancel" hidden>Отмена</button>
-                        </div>
-                    </fieldset>
+                    <p class="muted" id="department-edit-context" hidden></p>
+                    <div class="form-field" id="department-name-field">
+                        <label for="department-name">Название</label>
+                        <input id="department-name" name="name" required>
+                    </div>
+                    <div class="form-field" id="department-description-field">
+                        <label for="department-description">Описание</label>
+                        <textarea id="department-description" name="description" rows="3"></textarea>
+                    </div>
+                    <div class="form-field" id="department-parent-field">
+                        <label for="department-parent">Родительское подразделение</label>
+                        <select id="department-parent" name="parent_id"></select>
+                    </div>
+                    <p id="department-form-error" class="form-errors" role="alert"></p>
+                    <div class="collection-dialog-actions">
+                        <button class="button collection-secondary" type="button" id="department-cancel" data-dialog-close>Отмена</button>
+                        <button class="button button-primary" type="submit" id="department-save">Создать</button>
+                    </div>
                 </form>
-            </section>
+            </dialog>
         {% endif %}
     </div>
 {% endblock %}

@@ -9,8 +9,13 @@ from django.utils import timezone
 from apps.access.policy import Access
 from apps.organizations.services import visible_organizations
 
-from .models import Department, DepartmentInvitation, DepartmentMembership
-from .services import DepartmentConflict
+from .models import DepartmentInvitation, DepartmentMembership
+from .services import (
+    DepartmentConflict,
+    active_department_members,
+    can_view_department_directory,
+    can_view_directory_others,
+)
 
 
 def _organization(user, org_id, *, lock=False):
@@ -40,13 +45,8 @@ def _active_org_members(organization):
 
 
 def _active_branch_members(department, branch_ids):
-    return DepartmentMembership.objects.filter(
-        organization_id=department.organization_id,
+    return active_department_members(department.organization).filter(
         department_id__in=branch_ids,
-        department__is_archived=False,
-        is_active=True,
-        organization_membership__is_active=True,
-        organization_membership__user__is_active=True,
     )
 
 
@@ -80,15 +80,11 @@ def _directory_context(user, org_id, department_id):
         raise Http404
     branch_members = _active_branch_members(department, _branch_ids(department_id, children))
     access = Access(user, organization)
-    can_see_others = (
-        organization.department_directory_visibility
-        == organization.DepartmentDirectoryVisibility.ORGANIZATION
-        or access.allows("departments.directory.read")
-    )
-    can_read_branch = can_see_others or access.allows("departments.directory.read", department)
-    if not can_read_branch and not branch_members.filter(organization_membership__user=user).exists():
+    if not can_view_department_directory(access, department) and not branch_members.filter(
+        organization_membership=access.membership,
+    ).exists():
         raise Http404
-    return department, nodes, branch_members, can_see_others
+    return department, nodes, branch_members, can_view_directory_others(access)
 
 
 def get_directory_department(*, user, org_id, department_id):

@@ -1,46 +1,51 @@
+import {collectionActions, confirmArchive, setupDialog, setupDisclosures} from "../ui/collection.js";
+import {element, errorMessage, request} from "./directory.js";
+
 const app = document.querySelector("#department-app");
 const listUrl = app.dataset.apiUrl;
 const tree = document.querySelector("#department-tree");
 const treeHeading = document.querySelector("#department-tree-heading");
+const toolbar = document.querySelector("#department-toolbar");
+const search = document.querySelector("#department-search");
+const filter = document.querySelector("#department-show-archived");
 const status = document.querySelector("#department-status");
+const results = document.querySelector("#department-results");
+const feedback = document.querySelector("#department-feedback");
 const loadError = document.querySelector("#department-load-error");
 const retry = document.querySelector("#department-retry");
-const filter = document.querySelector("#department-show-archived");
+const createButton = document.querySelector("#department-create-open");
 const editor = document.querySelector("#department-editor");
 const form = document.querySelector("#department-form");
 const formHeading = document.querySelector("#department-form-heading");
 const formError = document.querySelector("#department-form-error");
 const saveButton = document.querySelector("#department-save");
-const cancelButton = document.querySelector("#department-cancel");
+const dialog = editor ? setupDialog(editor) : null;
+const token = form?.elements.namedItem("csrfmiddlewaretoken").value;
 
-const expanded = new Map();
+const expanded = new Set();
+const searchCollapsed = new Set();
 let departments = [];
-let editing = null;
-let original = null;
 let capabilities = {root: {}, nodes: {}};
+let original = null;
+let operation = "create";
+let busy = false;
+let confirming = false;
+
+setupDisclosures(app);
 
 function allowed(action, id) {
     return Boolean(id === null ? capabilities.root[action] : capabilities.nodes[id]?.[action]);
 }
 
-function element(tag, className, content) {
-    const node = document.createElement(tag);
-    node.className = className;
-    if (content !== undefined) {
-        node.textContent = content;
-    }
-    return node;
-}
-
 function childIndex(items) {
     const index = new Map();
-    const ids = new Set(items.map((item) => item.id));
+    const ids = new Set(items.map(({id}) => id));
     for (const item of items) {
-        const key = ids.has(item.parent_id) ? item.parent_id : null;
-        if (!index.has(key)) {
-            index.set(key, []);
+        const parent = ids.has(item.parent_id) ? item.parent_id : null;
+        if (!index.has(parent)) {
+            index.set(parent, []);
         }
-        index.get(key).push(item);
+        index.get(parent).push(item);
     }
     return index;
 }
@@ -59,106 +64,160 @@ function walk(index) {
     return ordered;
 }
 
-function action(label, item, callback) {
-    const button = element("button", "button department-secondary", label);
-    button.type = "button";
-    button.setAttribute("aria-label", `${label}: ${item.name}`);
-    button.addEventListener("click", () => callback(item));
-    return button;
+function matchingPaths(items, query) {
+    if (!query) {
+        return {items, count: items.length};
+    }
+    const byId = new Map(items.map((item) => [item.id, item]));
+    const keep = new Set();
+    let count = 0;
+    for (const item of items) {
+        if (!item.name.toLocaleLowerCase().includes(query)) {
+            continue;
+        }
+        count++;
+        let current = item;
+        while (current && !keep.has(current.id)) {
+            keep.add(current.id);
+            current = byId.get(current.parent_id);
+        }
+    }
+    return {items: items.filter(({id}) => keep.has(id)), count};
 }
 
-function disclosure(item, branch) {
-    const button = element("button", "department-toggle");
+function icon(symbol, className) {
+    const namespace = "http://www.w3.org/2000/svg";
+    const svg = document.createElementNS(namespace, "svg");
+    svg.setAttribute("class", className);
+    svg.setAttribute("aria-hidden", "true");
+    const use = document.createElementNS(namespace, "use");
+    use.setAttribute("href", `#icon-${symbol}`);
+    svg.append(use);
+    return svg;
+}
+
+function disclosure(item, branch, searching) {
+    const button = element("button", "structure-toggle");
     button.type = "button";
     button.setAttribute("aria-controls", branch.id);
-    const toggle = (open) => {
+    button.append(icon("arrow", "icon"));
+    function show(open) {
         branch.hidden = !open;
-        button.textContent = open ? "▾" : "▸";
         button.setAttribute("aria-expanded", String(open));
         button.setAttribute("aria-label", `${open ? "Свернуть" : "Развернуть"}: ${item.name}`);
-    };
-    toggle(expanded.get(item.id) ?? true);
+    }
+    show(searching ? !searchCollapsed.has(item.id) : expanded.has(item.id));
     button.addEventListener("click", () => {
         const open = branch.hidden;
-        expanded.set(item.id, open);
-        toggle(open);
+        if (searching) {
+            if (open) {
+                searchCollapsed.delete(item.id);
+            } else {
+                searchCollapsed.add(item.id);
+            }
+        } else if (open) {
+            expanded.add(item.id);
+        } else {
+            expanded.delete(item.id);
+        }
+        show(open);
     });
     return button;
 }
 
+function menuItems(item, membersUrl) {
+    const items = [];
+    if (membersUrl) {
+        items.push({label: "Открыть участников", href: membersUrl});
+    }
+    if (form && allowed("create", item.id)) {
+        items.push({label: "Добавить дочернее", onSelect: (trigger) => openEditor("create", trigger, null, item.id)});
+    }
+    if (form && allowed("update", item.id)) {
+        items.push({label: "Редактировать", onSelect: (trigger) => openEditor("update", trigger, item)});
+    }
+    if (form && allowed("move", item.id)) {
+        items.push({label: "Переместить", onSelect: (trigger) => openEditor("move", trigger, item)});
+    }
+    if (form && allowed("archive", item.id)) {
+        items.push({label: "Архивировать ветку", danger: true, onSelect: () => archive(item)});
+    }
+    return items;
+}
+
 function renderTree() {
+    const query = search.value.trim().toLocaleLowerCase();
     const visible = departments.filter((item) => filter.checked || !item.is_archived);
-    const index = childIndex(visible);
-    const root = element("ul", "department-list department-list-root");
+    const {items, count} = matchingPaths(visible, query);
+    const index = childIndex(items);
+    const visibleIds = new Set(items.map(({id}) => id));
+    const root = element("ul", "structure-list structure-list-root");
     root.setAttribute("role", "list");
     const lists = new Map([[null, root]]);
-    const visibleIds = new Set(visible.map((item) => item.id));
-    filter.closest("label").hidden = !departments.some((item) => item.is_archived);
-
     for (const {item, depth} of walk(index)) {
         const entry = document.createElement("li");
-        const row = element("div", "department-row");
-        row.style.setProperty("--department-depth", depth);
-
-        const info = element("div", "department-info");
-        const title = element("p", "department-name", item.name);
-        if (item.is_archived) {
-            title.append(element("span", "department-archived", "Архив"));
+        const row = element("div", "structure-row");
+        row.id = `department-node-${item.id}`;
+        row.style.setProperty("--structure-depth", depth);
+        if (depth > 0) {
+            row.dataset.nested = "";
         }
-        info.append(title);
-        if (item.description) {
-            info.append(element("p", "department-description", item.description));
+        if (item.is_archived) {
+            row.dataset.archived = "";
         }
 
         entry.append(row);
-        const list = lists.get(visibleIds.has(item.parent_id) ? item.parent_id : null);
-        list.append(entry);
-
+        lists.get(visibleIds.has(item.parent_id) ? item.parent_id : null).append(entry);
         if (index.has(item.id)) {
-            const branch = element("ul", "department-list");
+            const branch = element("ul", "structure-list");
             branch.id = `department-children-${item.id}`;
             branch.setAttribute("role", "list");
             lists.set(item.id, branch);
-            row.append(disclosure(item, branch));
+            row.append(disclosure(item, branch, Boolean(query)));
             entry.append(branch);
         } else {
-            const placeholder = element("span", "department-toggle-placeholder");
-            placeholder.setAttribute("aria-hidden", "true");
-            row.append(placeholder);
+            row.append(element("span", ""));
         }
 
-        row.append(info);
-        if (!item.is_archived) {
-            const actions = element("div", "department-actions");
-            const membersLink = element("a", "button department-secondary", "Участники");
-            membersLink.href = `${app.dataset.structureUrl}${item.id}/members/`;
-            membersLink.setAttribute("aria-label", `Участники: ${item.name}`);
-            actions.append(membersLink);
-            if (form && allowed("create", item.id)) {
-                actions.append(action("Добавить дочернее", item, (parent) => {
-                    resetEditor(parent.id);
-                    form.elements.namedItem("name").focus();
-                }));
-            }
-            if (form && (allowed("update", item.id) || allowed("move", item.id))) {
-                actions.append(action(allowed("update", item.id) ? "Редактировать" : "Переместить", item, edit));
-            }
-            if (form && allowed("archive", item.id)) {
-                actions.append(action("Архивировать ветку", item, archive));
-            }
-            row.append(actions);
+        const membersUrl = !item.is_archived && allowed("open_members", item.id)
+            ? `${app.dataset.structureUrl}${item.id}/members/` : "";
+        const body = element("div", "structure-body");
+        const title = element(membersUrl ? "a" : "span", "structure-name", item.name);
+        if (membersUrl) {
+            title.href = membersUrl;
+        } else {
+            title.tabIndex = -1;
+        }
+        body.append(title);
+        if (item.is_archived) {
+            body.append(element("span", "collection-badge", "Архив"));
+        }
+        if (depth > 3) {
+            body.append(element("span", "structure-level", `Уровень ${depth + 1}`));
+        }
+        if (item.description) {
+            body.append(element("p", "structure-description", item.description));
+        }
+        row.append(icon("org", "icon structure-icon"), body);
+        const actions = item.is_archived ? [] : menuItems(item, membersUrl);
+        if (actions.length) {
+            row.append(collectionActions(item.name, actions));
         }
     }
 
-    const emptyMessage = "Пока нет подразделений для отображения.";
-    tree.replaceChildren(root.childElementCount ? root : element("p", "muted department-message", emptyMessage));
+    tree.replaceChildren(root);
+    if (query) {
+        results.textContent = count ? `Найдено: ${count}. Показаны пути к результатам.` : "По этому запросу подразделений нет.";
+    } else {
+        results.textContent = count ? "" : "Подразделений для отображения пока нет.";
+    }
 }
 
 function parentChoices(selected) {
     const index = childIndex(departments.filter((item) => !item.is_archived));
     const excluded = new Set();
-    if (editing !== null) {
-        const stack = [editing];
+    if (operation === "move") {
+        const stack = [original.id];
         while (stack.length) {
             const id = stack.pop();
             excluded.add(id);
@@ -170,194 +229,203 @@ function parentChoices(selected) {
 
     const select = form.elements.namedItem("parent_id");
     select.replaceChildren();
-    const operation = editing === null ? "create" : "move";
     if (selected === null || allowed(operation, null)) {
         select.add(new Option("Без родительского подразделения", ""));
     }
     for (const {item, depth} of walk(index)) {
         if (!excluded.has(item.id) && (item.id === selected || allowed(operation, item.id))) {
-            const prefix = depth ? `${"— ".repeat(Math.min(depth, 3))}` : "";
-            select.add(new Option(prefix + item.name, String(item.id)));
+            const level = depth > 3 ? ` · уровень ${depth + 1}` : "";
+            select.add(new Option(`${"— ".repeat(Math.min(depth, 3))}${item.name}${level}`, String(item.id)));
         }
     }
     select.value = selected === null ? "" : String(selected);
+    return select;
 }
 
-function edit(item) {
-    editing = item.id;
-    original = item;
-    editor.hidden = false;
-    formHeading.textContent = allowed("update", item.id) ? "Редактирование подразделения" : "Перемещение подразделения";
-    formError.textContent = "";
-    form.elements.namedItem("name").value = item.name;
-    form.elements.namedItem("description").value = item.description;
-    form.elements.namedItem("name").readOnly = !allowed("update", item.id);
-    form.elements.namedItem("description").readOnly = !allowed("update", item.id);
-    parentChoices(item.parent_id);
-    form.elements.namedItem("parent_id").disabled = !allowed("move", item.id);
-    saveButton.textContent = "Сохранить";
-    cancelButton.hidden = false;
-    form.elements.namedItem("name").focus();
+function updateMoveAvailability() {
+    if (operation === "move") {
+        const select = form.elements.namedItem("parent_id");
+        saveButton.disabled = select.value === String(original.parent_id ?? "");
+    }
 }
 
-function resetEditor(parentId = null) {
-    if (!form) {
+function openEditor(mode, trigger, item = null, parentId = null) {
+    if (busy || confirming) {
         return;
     }
-    editing = null;
-    original = null;
-    editor.hidden = !allowed("create", parentId);
-    formHeading.textContent = "Новое подразделение";
-    form.elements.namedItem("name").value = "";
-    form.elements.namedItem("description").value = "";
+    operation = mode;
+    original = item;
+    const moving = mode === "move";
+    const updating = mode === "update";
+    const context = document.querySelector("#department-edit-context");
+    context.hidden = !moving;
+    context.textContent = moving ? item.name : "";
+    formHeading.textContent = moving ? "Перемещение подразделения"
+        : updating ? "Редактирование подразделения" : "Новое подразделение";
+
+    const name = form.elements.namedItem("name");
+    const description = form.elements.namedItem("description");
+    name.value = item?.name ?? "";
+    description.value = item?.description ?? "";
+    name.disabled = moving;
+    description.disabled = moving;
+    document.querySelector("#department-name-field").hidden = moving;
+    document.querySelector("#department-description-field").hidden = moving;
+    document.querySelector("#department-parent-field").hidden = updating;
+
+    const parent = form.elements.namedItem("parent_id");
+    parent.disabled = updating;
+    if (!updating) {
+        parentChoices(moving ? item.parent_id : parentId);
+    }
     formError.textContent = "";
-    form.elements.namedItem("name").readOnly = false;
-    form.elements.namedItem("description").readOnly = false;
-    form.elements.namedItem("parent_id").disabled = false;
-    parentChoices(parentId);
-    saveButton.textContent = "Создать";
-    cancelButton.hidden = true;
+    saveButton.textContent = moving ? "Переместить" : updating ? "Сохранить" : "Создать";
+    saveButton.disabled = false;
+    updateMoveAvailability();
+    if (moving && parent.options.length <= 1) {
+        formError.textContent = "Нет доступных подразделений для перемещения.";
+    }
+    dialog.open(trigger, moving ? parent : name);
 }
 
-function setBusy(busy) {
-    tree.setAttribute("aria-busy", String(busy));
-    filter.disabled = busy;
-    for (const button of tree.querySelectorAll("button")) {
-        button.disabled = busy;
-    }
-    if (form) {
-        form.querySelector("fieldset").disabled = busy;
+function revealPath(parentId) {
+    const byId = new Map(departments.map((item) => [item.id, item]));
+    let current = byId.get(parentId);
+    while (current) {
+        expanded.add(current.id);
+        current = byId.get(current.parent_id);
     }
 }
 
-async function request(method, id = null, payload = null) {
-    const headers = {Accept: "application/json"};
-    if (method !== "GET") {
-        headers["X-CSRFToken"] = form.elements.namedItem("csrfmiddlewaretoken").value;
+function setBusy(value) {
+    busy = value;
+    tree.setAttribute("aria-busy", String(value));
+    retry.disabled = value;
+    if (createButton) {
+        createButton.disabled = value;
     }
-    if (payload !== null) {
-        headers["Content-Type"] = "application/json";
-    }
-    const url = id === null ? listUrl : `${listUrl}${id}/`;
-    const response = await fetch(url, {
-        method,
-        headers,
-        mode: "same-origin",
-        body: payload === null ? undefined : JSON.stringify(payload),
-    });
-    if (!response.ok) {
-        const errors = {
-            401: "Сессия завершилась. Войдите снова.",
-            403: "Не удалось подтвердить доступ. Обновите страницу и проверьте права.",
-            404: "Запись недоступна. Обновите структуру.",
-            409: "Не удалось применить изменение. Проверьте состояние подразделения и его родителя.",
-            422: "Проверьте название и выбранное родительское подразделение.",
-        };
-        const data = await response.json().catch(() => null);
-        const detail = response.status === 409 && typeof data?.detail === "string" ? data.detail : "";
-        throw new Error(detail || errors[response.status] || "Не удалось выполнить запрос.");
-    }
-    return response.status === 204 ? null : response.json();
 }
 
-async function reload(message = "") {
+async function reload() {
     setBusy(true);
     loadError.textContent = "";
     retry.hidden = true;
-    status.textContent = message || "Загружаем структуру…";
-
+    status.textContent = "Загружаем структуру…";
     try {
         [departments, capabilities] = await Promise.all([
-            request("GET"),
-            form ? fetch(app.dataset.actionsUrl, {mode: "same-origin"}).then((response) => {
-                if (!response.ok) {
-                    throw new Error("Не удалось загрузить полномочия для структуры.");
-                }
-                return response.json();
-            }) : {root: {}, nodes: {}},
+            request(listUrl),
+            request(app.dataset.actionsUrl),
         ]);
         renderTree();
-        resetEditor();
-        status.textContent = message;
+        toolbar.hidden = false;
+        if (createButton) {
+            createButton.hidden = !allowed("create", null);
+        }
         return true;
     } catch (error) {
-        status.textContent = "";
-        loadError.textContent = message
-            ? `${message} Обновите структуру, чтобы увидеть результат.`
-            : error instanceof TypeError
-                ? "Не удалось загрузить структуру. Проверьте соединение и повторите попытку."
-                : error.message;
+        loadError.textContent = errorMessage(error);
         retry.hidden = false;
         return false;
+    } finally {
+        status.textContent = "";
+        setBusy(false);
+    }
+}
+
+async function archive(item) {
+    if (busy || confirming) {
+        return;
+    }
+    confirming = true;
+    let confirmed;
+    try {
+        confirmed = await confirmArchive(item.name, {
+            heading: "Архивировать ветку?",
+            description: `«${item.name}» и все вложенные подразделения будут архивированы. Они останутся доступны через фильтр архива.`,
+            confirmLabel: "Архивировать ветку",
+        });
+    } finally {
+        confirming = false;
+    }
+    if (!confirmed) {
+        return;
+    }
+    setBusy(true);
+    loadError.textContent = "";
+    try {
+        await request(`${listUrl}${item.id}/`, "DELETE", token);
+        feedback.textContent = "Ветка перемещена в архив.";
+        await reload();
+        treeHeading.focus();
+    } catch (error) {
+        loadError.textContent = errorMessage(error);
+        retry.hidden = false;
     } finally {
         setBusy(false);
     }
 }
 
-async function mutate(method, id, payload, message, errorElement) {
-    setBusy(true);
-    errorElement.textContent = "";
-    try {
-        await request(method, id, payload);
-    } catch (error) {
-        errorElement.textContent = error instanceof TypeError
-            ? "Соединение прервалось. Обновите структуру перед повторной попыткой."
-            : error.message;
-        retry.hidden = false;
-        setBusy(false);
-        return;
-    }
-    if (await reload(message)) {
-        const focusTarget = method === "DELETE" || editor.hidden ? treeHeading : form.elements.namedItem("name");
-        focusTarget.focus();
-    }
-}
-
-function archive(item) {
-    const question = `Архивировать «${item.name}» вместе со всеми вложенными подразделениями? Ветка останется доступна при включённом показе архива.`;
-    if (window.confirm(question)) {
-        return mutate("DELETE", item.id, null, "Ветка перемещена в архив.", loadError);
-    }
-}
-
 if (form) {
-    form.addEventListener("submit", (event) => {
+    const parent = form.elements.namedItem("parent_id");
+    parent.addEventListener("change", updateMoveAvailability);
+    createButton.addEventListener("click", () => openEditor("create", createButton));
+    form.addEventListener("submit", async (event) => {
         event.preventDefault();
-        const nameInput = form.elements.namedItem("name");
-        const name = nameInput.value.trim();
-        if (!name || Array.from(name).length > 200) {
-            formError.textContent = "Введите название длиной от 1 до 200 символов.";
-            nameInput.focus();
+        if (busy) {
             return;
         }
-        const parent = form.elements.namedItem("parent_id").value;
-        const parentId = parent ? Number(parent) : null;
-        const description = form.elements.namedItem("description").value;
-        const creating = editing === null;
+        formError.textContent = "";
         const payload = {};
-        if (creating || allowed("update", editing)) {
-            payload.name = name;
-            payload.description = description;
+        if (operation !== "move") {
+            const name = form.elements.namedItem("name");
+            payload.name = name.value.trim();
+            if (!payload.name || Array.from(payload.name).length > 200) {
+                formError.textContent = "Введите название длиной от 1 до 200 символов.";
+                name.focus();
+                return;
+            }
+            payload.description = form.elements.namedItem("description").value;
         }
-        if (creating || (allowed("move", editing) && parentId !== original.parent_id)) {
-            payload.parent_id = parentId;
+        if (operation !== "update") {
+            payload.parent_id = parent.value ? Number(parent.value) : null;
         }
-        if (!Object.keys(payload).length) {
+        const creating = operation === "create";
+        const moving = operation === "move";
+        if (moving && payload.parent_id === original.parent_id) {
             formError.textContent = "Выберите нового родителя.";
             return;
         }
-        if (parentId !== null) {
-            expanded.set(parentId, true);
+
+        setBusy(true);
+        dialog.setBusy(true);
+        try {
+            const updated = await request(creating ? listUrl : `${listUrl}${original.id}/`,
+                creating ? "POST" : "PATCH", token, payload);
+            dialog.close();
+            revealPath(updated.parent_id);
+            if (creating || moving) {
+                search.value = "";
+                searchCollapsed.clear();
+            }
+            feedback.textContent = creating ? "Подразделение создано."
+                : moving ? "Подразделение перемещено." : "Изменения сохранены.";
+            if (await reload()) {
+                const title = document.querySelector(`#department-node-${updated.id} .structure-name`);
+                (title ?? treeHeading).focus();
+            }
+        } catch (error) {
+            formError.textContent = errorMessage(error);
+        } finally {
+            dialog.setBusy(false);
+            setBusy(false);
         }
-        const message = creating ? "Подразделение создано." : "Изменения сохранены.";
-        return mutate(creating ? "POST" : "PATCH", editing, payload, message, formError);
-    });
-    cancelButton.addEventListener("click", () => {
-        resetEditor();
-        (editor.hidden ? treeHeading : form.elements.namedItem("name")).focus();
     });
 }
 
+search.addEventListener("input", () => {
+    searchCollapsed.clear();
+    renderTree();
+});
 filter.addEventListener("change", renderTree);
 retry.addEventListener("click", () => reload());
 reload();

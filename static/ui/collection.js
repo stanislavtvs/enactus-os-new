@@ -41,7 +41,10 @@ export function setupCollection(app, list, storageKey) {
             }
         });
     }
+    setupDisclosures(app);
+}
 
+export function setupDisclosures(app) {
     const disclosures = () => app.querySelectorAll("details.collection-actions[open], details.collection-filters[open]");
     document.addEventListener("click", (event) => {
         for (const details of disclosures()) {
@@ -64,15 +67,17 @@ export function setupCollection(app, list, storageKey) {
     });
 }
 
-export function setupDialog(dialog, opener) {
+export function setupDialog(dialog, opener = null) {
+    let returnFocus;
     let busy = false;
     const buttons = dialog.querySelectorAll("[data-dialog-close], button[type='submit']");
-    opener.addEventListener("click", () => {
+    function open(trigger = opener, initialField = dialog.querySelector("[autofocus]")
+        ?? dialog.querySelector("form input:not([type='hidden'])")) {
+        returnFocus = trigger;
         dialog.showModal();
-        const initialField = dialog.querySelector("[autofocus]")
-            ?? dialog.querySelector("form input:not([type='hidden'])");
         initialField?.focus();
-    });
+    }
+    opener?.addEventListener("click", () => open());
     for (const close of dialog.querySelectorAll("[data-dialog-close]")) {
         close.addEventListener("click", () => dialog.close());
     }
@@ -81,8 +86,9 @@ export function setupDialog(dialog, opener) {
             event.preventDefault();
         }
     });
-    dialog.addEventListener("close", () => opener.focus());
+    dialog.addEventListener("close", () => returnFocus?.focus());
     return {
+        open,
         close() { dialog.close(); },
         setBusy(value) {
             busy = value;
@@ -126,49 +132,66 @@ export function collectionRow({title, href, status, details = [], badges = [], c
         labels.append(element("span", className, text));
     }
 
+    const items = [{label: "Открыть", href}];
+    if (canEdit) {
+        items.push({label: "Редактировать", href: href + "#edit"});
+    }
+    if (canArchive) {
+        items.push({label: "Архивировать", danger: true, onSelect: (trigger) => onArchive(trigger.parentElement)});
+    }
+    const actions = collectionActions(title, items);
+    row.append(body, labels, actions);
+    return row;
+}
+
+export function collectionActions(title, items) {
     const actions = element("details", "collection-actions");
     const summary = element("summary", "collection-action-toggle", "⋯");
     summary.setAttribute("aria-label", `Действия: ${title}`);
     summary.title = "Действия";
     const menu = element("div", "collection-menu");
-    menu.append(menuLink("Открыть", href));
-    if (canEdit) {
-        menu.append(menuLink("Редактировать", href + "#edit"));
-    }
-    if (canArchive) {
-        const archive = element("button", "collection-menu-item collection-archive-action", "Архивировать");
-        archive.type = "button";
-        archive.addEventListener("click", () => {
+    for (const {label, href, onSelect, danger} of items) {
+        if (href) {
+            menu.append(menuLink(label, href));
+            continue;
+        }
+        const classes = danger ? "collection-menu-item collection-archive-action" : "collection-menu-item";
+        const button = element("button", classes, label);
+        button.type = "button";
+        button.addEventListener("click", () => {
             closedDetails(actions, true);
-            onArchive(actions);
+            onSelect(summary);
         });
-        menu.append(archive);
+        menu.append(button);
     }
     actions.append(summary, menu);
-    row.append(body, labels, actions);
-    return row;
+    return actions;
 }
 
-export function confirmArchive(title) {
+export function confirmArchive(title, {
+    heading = "Архивировать объект?",
+    description = `«${title}» переместится в архив и останется доступен при показе архивных записей.`,
+    confirmLabel = "Архивировать",
+} = {}) {
     const dialog = element("dialog", "collection-dialog collection-confirmation");
     dialog.id = "collection-archive-dialog";
     dialog.setAttribute("aria-labelledby", "collection-archive-heading");
     dialog.setAttribute("aria-describedby", "collection-archive-description");
-    const heading = element("h2", "", "Архивировать объект?");
-    heading.id = "collection-archive-heading";
-    const description = element("p", "muted", `«${title}» переместится в архив и останется доступен при показе архивных записей.`);
-    description.id = "collection-archive-description";
+    const titleElement = element("h2", "", heading);
+    titleElement.id = "collection-archive-heading";
+    const descriptionElement = element("p", "muted", description);
+    descriptionElement.id = "collection-archive-description";
     const form = element("form", "collection-dialog-actions");
     form.method = "dialog";
     const cancel = element("button", "button collection-secondary", "Отмена");
     cancel.type = "submit";
     cancel.value = "cancel";
     cancel.autofocus = true;
-    const confirm = element("button", "button button-primary", "Архивировать");
+    const confirm = element("button", "button button-primary", confirmLabel);
     confirm.type = "submit";
     confirm.value = "archive";
     form.append(cancel, confirm);
-    dialog.append(heading, description, form);
+    dialog.append(titleElement, descriptionElement, form);
     document.body.append(dialog);
     dialog.showModal();
     return new Promise((resolve) => {

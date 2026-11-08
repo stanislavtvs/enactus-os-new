@@ -171,7 +171,9 @@
     background: var(--surface);
     box-shadow: 0 0.6rem 2.5rem #0003;
     overflow: auto;
+    overscroll-behavior: contain;
 }
+body:has(.collection-dialog[open]) { overflow: hidden; }
 .collection-dialog::backdrop { background: #14110c88; }
 .collection-dialog-header, .collection-dialog-actions {
     display: flex;

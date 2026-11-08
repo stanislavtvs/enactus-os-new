@@ -113,7 +113,7 @@ HTML-формы отправляют изменения методом POST с C
 |---|---|---|
 | GET | `/permissions/` | HTTP 200, каталог `[{code,label,department_scoped}]`. |
 | GET | `/permissions/effective/` | Необязательный query-параметр `department_id`. HTTP 200, `{permissions:[code]}` текущего участника. |
-| GET | `/department-actions/` | HTTP 200, `root` с флагами `create`, `move` и `nodes` с флагами `create`, `update`, `move`, `archive` по идентификатору действующего узла. |
+| GET | `/department-actions/` | HTTP 200, `root` с флагами `create`, `move` и `nodes` с флагами `create`, `update`, `move`, `archive`, `open_members` по идентификатору действующего узла. `open_members` отражает право открыть каталог участников подразделения. |
 | GET | `/role-subjects/` | HTTP 200, активные членства организации с `id`, `username` и `department_memberships` (элементы `{id,department_id,name}`). |
 | GET | `/roles/` | HTTP 200, роли организации, включая архивные. |
 | POST | `/roles/` | `{"name":"Название","permissions":[{"code":"departments.update","include_descendants":false}]}`. HTTP 201, роль. |

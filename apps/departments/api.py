@@ -98,9 +98,17 @@ def archive_department(request, org_id: RecordId, department_id: RecordId):
     return 204, None
 
 
+class DepartmentNodeActions(Schema):
+    create: bool
+    update: bool
+    move: bool
+    archive: bool
+    open_members: bool
+
+
 class DepartmentActionsOutput(Schema):
     root: dict[str, bool]
-    nodes: dict[int, dict[str, bool]]
+    nodes: dict[int, DepartmentNodeActions]
 
 
 @router.get("/{org_id}/department-actions/", response=DepartmentActionsOutput, url_name="department_actions")
