@@ -40,7 +40,9 @@ docker compose exec web python manage.py test
 curl --fail http://127.0.0.1:8002/api/v1/health/
 ```
 
-Тестовый runner Django создаёт отдельную базу с префиксом `test_` и удаляет свою временную БД после прогона. Для остановки проекта с сохранением данных используйте `docker compose stop`.
+Штатная команда `manage.py test` создаёт отдельную базу с уникальным именем `test_enactus_*` на каждый прогон. Защита PostgreSQL проверяет имя перед созданием и удалением и прекращает прогон, если такая база уже существует. После тестов Django удаляет только временную базу, созданную этим прогоном. Запускайте тесты последовательно, без `--keepdb` и `--parallel`. Созданием и очисткой управляет `manage.py test`.
+
+Для остановки проекта с сохранением данных используйте `docker compose stop`.
 
 ## Резервная копия PostgreSQL
 
@@ -59,6 +61,25 @@ restore_db="enactus_restore_$(date +%Y%m%d_%H%M%S)"
 docker compose exec -T db sh -c 'createdb -U "$POSTGRES_USER" "$1"' sh "$restore_db" &&
   docker compose exec -T db sh -c 'pg_restore --exit-on-error -U "$POSTGRES_USER" -d "$1"' sh "$restore_db" < "$backup_file"
 ```
+
+### Если отсутствует рабочая база
+
+Проверка готовности PostgreSQL выполняет запрос к рабочей базе по TCP с ролью и паролем из настроек. Если контейнер запущен, но база недоступна, проверьте состояние проекта и наличие базы через служебную БД `postgres`:
+
+```bash
+docker compose ps
+docker compose exec -T db sh -c 'psql -X -w -U "$POSTGRES_USER" -d postgres -l'
+```
+
+Сверьте ожидаемое имя с `POSTGRES_DB` в локальном `.env`. Перед восстановлением подтвердите отсутствие рабочей базы и согласуйте с владельцем, какой дамп восстанавливать. Остановите веб-сервис на время восстановления. Команда `createdb` прервётся, если база уже существует:
+
+```bash
+docker compose stop web
+docker compose exec -T db sh -c 'createdb -U "$POSTGRES_USER" --maintenance-db=postgres "$POSTGRES_DB"' &&
+  docker compose exec -T db sh -c 'pg_restore --single-transaction --exit-on-error -U "$POSTGRES_USER" -d "$POSTGRES_DB"' < "$backup_file"
+```
+
+После успешного восстановления запустите `docker compose up --build --wait`. Если подтверждено, что контур был пустым, по согласованию можно создать пустую рабочую базу той же командой `createdb` и запустить Compose для применения миграций. Именованный том и существующие базы сохраняются при обеих процедурах.
 
 ## Структура
 
