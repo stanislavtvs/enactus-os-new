@@ -49,6 +49,8 @@ class Permission(models.TextChoices):
     CALENDAR_CANCEL = "calendar.cancel", "Отменять события календаря"
     CALENDAR_ARCHIVE = "calendar.archive", "Архивировать события календаря"
     CALENDAR_MANAGE_SCOPE = "calendar.manage_scope", "Управлять событиями проектов и подразделений"
+    CALENDAR_INVITE = "calendar.invite", "Приглашать участников на календарные события"
+    CALENDAR_INVITE_MANAGE = "calendar.invite.manage", "Управлять приглашениями и ответами на события"
     ROLES_READ = "roles.read", "Просматривать роли"
     ROLES_MANAGE = "roles.manage", "Управлять ролями"
 

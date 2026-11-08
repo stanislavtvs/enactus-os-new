@@ -5,6 +5,7 @@
 {% block extra_head %}
     <link rel="stylesheet" href="{% static 'ui/collection.css' %}">
     <link rel="stylesheet" href="{% static 'calendar_app/calendar.css' %}">
+    <link rel="stylesheet" href="{% static 'calendar_app/invitations.css' %}">
     <script type="module" src="{% static 'calendar_app/calendar.js' %}"></script>
 {% endblock %}
 
@@ -12,7 +13,8 @@
     <nav class="breadcrumbs" aria-label="Путь к странице">
         <a href="{% url 'organization-detail' org_id=organization.id %}">{{ organization.name }}</a>
     </nav>
-    <div id="calendar-app" data-org-url="{{ api_org_url }}">
+    <div id="calendar-app" data-org-url="{{ api_org_url }}"
+         data-invitations-url="{% url 'organization-calendar-invitations' org_id=organization.id %}">
         {% csrf_token %}
         <header class="page-heading collection-header">
             <div>
@@ -184,11 +186,14 @@
             <p id="calendar-detail-error" class="form-errors calendar-message" role="alert"></p>
             <dl id="calendar-detail-facts" class="calendar-fields calendar-facts"></dl>
             <p id="calendar-detail-description" class="calendar-description"></p>
+            <div id="calendar-detail-invitation"></div>
+            {% include "calendar_app/participants.html" %}
             <div id="calendar-detail-actions" class="collection-dialog-actions" hidden>
                 <button class="button collection-secondary" id="calendar-event-edit" type="button" hidden>Редактировать</button>
                 <button class="button collection-secondary" id="calendar-event-cancel" type="button" hidden>Отменить событие</button>
                 <button class="button collection-secondary" id="calendar-event-archive" type="button" hidden>Архивировать</button>
             </div>
         </dialog>
+        {% include "calendar_app/audience_dialog.html" %}
     </div>
 {% endblock %}

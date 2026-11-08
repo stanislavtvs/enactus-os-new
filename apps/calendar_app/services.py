@@ -26,6 +26,7 @@ UPDATE = "calendar.update"
 CANCEL = "calendar.cancel"
 ARCHIVE = "calendar.archive"
 MANAGE_SCOPE = "calendar.manage_scope"
+MANAGE_INVITATIONS = "calendar.invite.manage"
 MAX_RANGE_DAYS = 42
 # Civil all-day dates can differ from viewer dates by more than 24 hours.
 ALL_DAY_RANGE_MARGIN = timedelta(days=2)
@@ -115,6 +116,8 @@ def _can_create(access, project, department):
 
 
 def can_open_calendar(access):
+    from .invitation_services import has_active_invitation
+
     return (
         access.allows(READ)
         or any(
@@ -122,6 +125,7 @@ def can_open_calendar(access):
             for department in access.organization.departments.filter(is_archived=False)
         )
         or can_open_tasks(access)
+        or has_active_invitation(access)
     )
 
 
@@ -144,12 +148,15 @@ def calendar_filters(*, access):
 
 
 def _event_rows(access, *, lock=False):
+    from .invitation_services import annotate_invited
+
     rows = access.organization.calendar_events.select_related(
         "department", "project__responsible_department",
     ).annotate(_active_project_member=Exists(ProjectMembership.objects.filter(
         organization=access.organization, project_id=OuterRef("project_id"),
         organization_membership=access.membership, is_active=True,
     )))
+    rows = annotate_invited(rows, access)
     return rows.select_for_update(of=("self",)) if lock else rows
 
 
@@ -159,9 +166,9 @@ def _can_read_event(access, event):
     return _can_read(access, event.project, event.department)
 
 
-def visible_event(*, access, event_id, lock=False):
+def visible_event(*, access, event_id, lock=False, allow_invitation=False):
     event = get_object_or_404(_event_rows(access, lock=lock), pk=event_id)
-    if not _can_read_event(access, event):
+    if not (_can_read_event(access, event) or (allow_invitation and event._invitation_id is not None)):
         raise Http404
     return event
 
@@ -187,13 +194,18 @@ def _events_for_range(
         rows = rows.filter(department_id=department_id)
     if not include_archived:
         rows = rows.exclude(status=CalendarEvent.Status.ARCHIVED)
+    can_include_invited = project_id is None and department_id is None
     return [
         event for event in rows.order_by("starts_at", "id")
-        if (not event.all_day or _all_day_overlaps(event, start, end)) and _can_read_event(access, event)
+        if (
+            _can_read_event(access, event) or (can_include_invited and event._invitation_id is not None)
+        ) and (not event.all_day or _all_day_overlaps(event, start, end))
     ]
 
 
 def event_permissions(access, event):
+    if not _can_read_event(access, event):
+        return dict.fromkeys(("can_edit", "can_cancel", "can_archive", "can_manage_scope"), False)
     project, department = event.project, event.department
     scheduled = event.status == CalendarEvent.Status.SCHEDULED
     can_edit = scheduled and _allows(access, UPDATE, project, department)
@@ -206,25 +218,33 @@ def event_permissions(access, event):
 
 
 def event_item(access, event):
+    from .invitation_services import can_invite, can_manage_invitations
+
+    full_access = _can_read_event(access, event)
     return {
         "id": event.pk,
         "source": event.event_type,
         "type": event.event_type,
         "title": event.title,
-        "description": event.description,
+        "description": event.description if full_access else "",
         "starts_at": event.starts_at,
         "ends_at": event.ends_at,
         "timezone": event.timezone,
         "all_day": event.all_day,
         "status": event.status,
         "status_label": event.get_status_display(),
-        "project_id": event.project_id,
-        "department_id": event.department_id,
+        "project_id": event.project_id if full_access else None,
+        "department_id": event.department_id if full_access else None,
         "location": event.location or None,
         "online_url": event.online_url or None,
         "url": None,
         "created_at": event.created_at,
         "updated_at": event.updated_at,
+        "rsvp_mode": event.rsvp_mode,
+        "rsvp_revision": event.rsvp_revision,
+        "invitation_id": getattr(event, "_invitation_id", None),
+        "can_invite": full_access and can_invite(access, event),
+        "can_manage_invitations": full_access and can_manage_invitations(access, event),
         **event_permissions(access, event),
     }
 
@@ -334,17 +354,20 @@ def _validate_interval(starts_at, ends_at, timezone_name, all_day):
 def create_event(
     *, user, org_id, title, description, event_type, starts_at, ends_at, timezone_name,
     all_day=False, location="", online_url="", project_id=None, department_id=None,
+    rsvp_mode=CalendarEvent.RSVPMode.INFORMATIONAL,
 ):
     access = organization_access(user=user, org_id=org_id, lock=True)
     project = _linked_project(access, project_id)
     department = _linked_department(access, department_id)
     if not _can_create(access, project, department):
         raise PermissionDenied
+    if rsvp_mode != CalendarEvent.RSVPMode.INFORMATIONAL and not _allows(access, MANAGE_INVITATIONS, project, department):
+        raise PermissionDenied
     _validate_interval(starts_at, ends_at, timezone_name, all_day)
     event = access.organization.calendar_events.create(
         created_by=access.membership, title=title, description=description, event_type=event_type,
         starts_at=starts_at, ends_at=ends_at, timezone=timezone_name, all_day=all_day,
-        location=location, online_url=online_url, project=project, department=department,
+        location=location, online_url=online_url, project=project, department=department, rsvp_mode=rsvp_mode,
     )
     return event_item(access, event)
 
@@ -353,7 +376,9 @@ def create_event(
 def update_event(*, user, org_id, event_id, changes):
     access = organization_access(user=user, org_id=org_id, lock=True)
     event = visible_event(access=access, event_id=event_id, lock=True)
-    if not _allows(access, UPDATE, event.project, event.department):
+    if (not changes or changes.keys() - {"rsvp_mode"}) and not _allows(access, UPDATE, event.project, event.department):
+        raise PermissionDenied
+    if "rsvp_mode" in changes and not _allows(access, MANAGE_INVITATIONS, event.project, event.department):
         raise PermissionDenied
     if event.status != CalendarEvent.Status.SCHEDULED:
         raise CalendarConflict("Изменить можно только запланированное событие.")
@@ -372,14 +397,27 @@ def update_event(*, user, org_id, event_id, changes):
             and _allows(access, MANAGE_SCOPE, project, department)
         ):
             raise PermissionDenied
+        if "rsvp_mode" in changes and not _allows(access, MANAGE_INVITATIONS, project, department):
+            raise PermissionDenied
         event.project = project
         event.department = department
         fields.extend(["project", "department"])
-    for field in ("title", "description", "event_type", "starts_at", "ends_at", "timezone", "all_day", "location", "online_url"):
+    schedule_changed = any(
+        field in changes and changes[field] != getattr(event, field)
+        for field in ("starts_at", "ends_at", "timezone", "all_day")
+    )
+    new_mode = changes.get("rsvp_mode", event.rsvp_mode)
+    informational_transition = new_mode != event.rsvp_mode and CalendarEvent.RSVPMode.INFORMATIONAL in (
+        event.rsvp_mode, new_mode,
+    )
+    for field in ("title", "description", "event_type", "starts_at", "ends_at", "timezone", "all_day", "location", "online_url", "rsvp_mode"):
         if field in changes:
             setattr(event, field, changes[field])
             fields.append(field)
     _validate_interval(event.starts_at, event.ends_at, event.timezone, event.all_day)
+    if schedule_changed or informational_transition:
+        event.rsvp_revision += 1
+        fields.append("rsvp_revision")
     if fields:
         event.save(update_fields=[*fields, "updated_at"])
     return event_item(access, event)

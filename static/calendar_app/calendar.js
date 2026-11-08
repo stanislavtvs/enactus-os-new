@@ -1,7 +1,9 @@
 import {element, errorMessage, request} from "../departments/directory.js";
 import {confirmArchive, setupDialog, setupDisclosures} from "../ui/collection.js";
-import {addDays, calendarPeriod, civilLabel, localDay, localTime, movePeriod, offsetLabel, validZone} from "./dates.js";
+import {addDays, calendarPeriod, civilLabel, localDay, movePeriod, validZone} from "./dates.js";
 import {httpLink, setupEditor} from "./editor.js";
+import {setupParticipants} from "./participants.js";
+import {formatInstant} from "./rsvp.js";
 import {renderCalendar, sourceLabel} from "./views.js";
 
 const app = document.querySelector("#calendar-app");
@@ -123,6 +125,7 @@ function announceMutation(message) {
 
 const detail = get("event-detail");
 const detailModal = setupDialog(detail);
+const participants = setupParticipants({app, api, token, zone: () => zone, isDetailOpen: () => detail.open});
 const detailButtons = ["edit", "cancel", "archive"].map((action) => get(`event-${action}`));
 let detailGeneration = 0;
 let activeEvent = null;
@@ -138,10 +141,6 @@ function eventFact(label, value) {
     definition.append(value);
     fact.append(element("dt", "", label), definition);
     get("detail-facts").append(fact);
-}
-
-function formatInstant(instant, eventZone) {
-    return `${civilLabel(localDay(instant, eventZone), {dateStyle: "medium"})}, ${localTime(instant, eventZone)} (${offsetLabel(instant, eventZone)})`;
 }
 
 function displayEvent(event) {
@@ -172,6 +171,11 @@ function displayEvent(event) {
         eventFact("Онлайн-встреча", anchor);
     }
     get("detail-description").textContent = event.description;
+    if (Number.isSafeInteger(event.invitation_id) && event.invitation_id > 0) {
+        const link = element("a", "", "Моё приглашение");
+        link.href = `${app.dataset.invitationsUrl}${event.invitation_id}/`;
+        get("detail-invitation").append(link);
+    }
     detailButtons.forEach((button, index) => {
         button.hidden = ![event.can_edit, event.can_cancel, event.can_archive][index];
     });
@@ -185,6 +189,8 @@ async function openEvent(event, trigger) {
     get("event-detail-heading").textContent = event.title;
     get("detail-facts").replaceChildren();
     get("detail-description").textContent = "";
+    get("detail-invitation").replaceChildren();
+    participants.reset();
     get("detail-actions").hidden = true;
     get("detail-error").textContent = "";
     get("detail-status").textContent = "Загрузка события…";
@@ -194,6 +200,7 @@ async function openEvent(event, trigger) {
         if (detail.open && generation === detailGeneration) {
             activeEvent = record;
             displayEvent(record);
+            participants.load(record);
         }
     } catch (error) {
         if (detail.open && generation === detailGeneration) {

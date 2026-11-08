@@ -1,0 +1,56 @@
+<dialog class="collection-dialog calendar-dialog" id="calendar-invite-dialog" aria-labelledby="calendar-invite-heading">
+    <header class="collection-dialog-header">
+        <h2 id="calendar-invite-heading">Пригласить участников</h2>
+        <button class="button collection-secondary" type="button" data-dialog-close aria-label="Закрыть форму">
+            <svg class="icon" aria-hidden="true"><use href="#icon-close"/></svg>
+        </button>
+    </header>
+    <form id="calendar-invite-form" class="form-stack" method="post">
+        <div class="form-field" id="calendar-audience-mode-field">
+            <label for="calendar-audience-mode">Режим RSVP</label>
+            <select id="calendar-audience-mode" name="mode">
+                <option value="informational">Информационное событие</option>
+                <option value="optional">Необязательный ответ</option>
+                <option value="required">Обязательный ответ</option>
+            </select>
+            <p class="muted form-hint">Обязательный ответ не означает обязательного участия.</p>
+            <button class="button collection-secondary" type="button" id="calendar-audience-save-mode" hidden>Сохранить режим</button>
+        </div>
+        <label class="calendar-check" id="calendar-audience-organization-field" hidden>
+            <input id="calendar-audience-organization" type="checkbox"> Все активные участники организации
+        </label>
+        <fieldset class="calendar-audience-group">
+            <legend>Отдельные участники</legend>
+            <div class="form-field">
+                <label for="calendar-audience-search">Поиск участника</label>
+                <input id="calendar-audience-search" type="search" autocomplete="off" maxlength="150">
+            </div>
+            <ul id="calendar-audience-selected" class="calendar-selected-members" role="list"></ul>
+            <div id="calendar-audience-members" class="calendar-audience-options"></div>
+            <p id="calendar-audience-members-status" class="muted calendar-message" role="status"></p>
+            <div class="calendar-participants-controls">
+                <button class="button collection-secondary" type="button" id="calendar-audience-prev" hidden>Назад</button>
+                <button class="button collection-secondary" type="button" id="calendar-audience-next" hidden>Далее</button>
+            </div>
+        </fieldset>
+        <fieldset class="calendar-audience-group">
+            <legend>Подразделения</legend>
+            <p class="muted form-hint">Для каждого выбранного подразделения укажите охват.</p>
+            <div id="calendar-audience-departments" class="calendar-audience-options"></div>
+        </fieldset>
+        <fieldset class="calendar-audience-group">
+            <legend>Проектные команды</legend>
+            <div id="calendar-audience-projects" class="calendar-audience-options"></div>
+        </fieldset>
+        <label class="calendar-check" id="calendar-audience-reinvite-field" hidden>
+            <input id="calendar-audience-reinvite" type="checkbox"> Повторно пригласить ранее отозванных
+        </label>
+        <p id="calendar-audience-count" class="collection-feedback" role="status"></p>
+        <p id="calendar-audience-error" class="form-errors calendar-message" role="alert"></p>
+        <div class="collection-dialog-actions">
+            <button class="button collection-secondary" type="button" data-dialog-close>Закрыть</button>
+            <button class="button collection-secondary" id="calendar-audience-preview" type="button" disabled>Рассчитать аудиторию</button>
+            <button class="button button-primary" id="calendar-audience-send" type="submit" disabled>Отправить приглашения</button>
+        </div>
+    </form>
+</dialog>

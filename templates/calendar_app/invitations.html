@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Приглашения на мероприятия — {{ organization.name }} — Enactus OS{% endblock %}
+{% block extra_head %}
+    <link rel="stylesheet" href="{% static 'ui/collection.css' %}">
+    <link rel="stylesheet" href="{% static 'calendar_app/calendar.css' %}">
+    <link rel="stylesheet" href="{% static 'calendar_app/invitations.css' %}">
+    <script type="module" src="{% static 'calendar_app/inbox.js' %}"></script>
+{% endblock %}
+
+{% block content %}
+    <nav class="breadcrumbs" aria-label="Путь к странице">
+        <a href="{% url 'organization-detail' org_id=organization.id %}">{{ organization.name }}</a>
+        {% if invitation_id %}
+            <a href="{% url 'organization-calendar-invitations' org_id=organization.id %}">Мои приглашения на мероприятия</a>
+        {% endif %}
+    </nav>
+    <div id="calendar-invitations-app" data-organization-id="{{ organization.id }}"
+         data-invitation-api-url="{{ invitation_api_url }}"
+         data-list-url="{% url 'organization-calendar-invitations' org_id=organization.id %}"
+         {% if invitation_id %}data-invitation-id="{{ invitation_id }}"{% endif %}>
+        {% csrf_token %}
+        <header class="page-heading collection-header">
+            <div>
+                <p class="eyebrow">{{ organization.name }}</p>
+                <h1>{% if invitation_id %}Приглашение на мероприятие{% else %}Мои приглашения на мероприятия{% endif %}</h1>
+            </div>
+        </header>
+        <noscript><p>Включите JavaScript, чтобы загрузить приглашения.</p></noscript>
+        {% if not invitation_id %}
+            <div class="form-field calendar-invitation-filter">
+                <label for="calendar-invitation-filter">Показать приглашения</label>
+                <select id="calendar-invitation-filter">
+                    <option value="upcoming">Предстоящие</option>
+                    <option value="pending">Ожидающие ответа</option>
+                    <option value="yes">Приду</option>
+                    <option value="no">Не приду</option>
+                    <option value="maybe">Пока не знаю</option>
+                    <option value="cancelled">Отменённые</option>
+                    <option value="all">Все</option>
+                </select>
+            </div>
+        {% endif %}
+        <p id="calendar-invitation-status" class="muted calendar-message" role="status"></p>
+        <p id="calendar-invitation-error" class="form-errors calendar-message" role="alert"></p>
+        <button class="button collection-secondary" id="calendar-invitation-retry" type="button" hidden>Обновить приглашения</button>
+        <div id="calendar-invitation-list" class="calendar-invitation-list"></div>
+    </div>
+{% endblock %}

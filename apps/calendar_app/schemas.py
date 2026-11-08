@@ -38,6 +38,7 @@ class EventInput(Schema):
     ends_at: AwareDatetime
     timezone: TimezoneName
     all_day: Annotated[bool, Field(strict=True)] = False
+    rsvp_mode: CalendarEvent.RSVPMode = CalendarEvent.RSVPMode.INFORMATIONAL
     location: Annotated[str, StringConstraints(
         strip_whitespace=True, max_length=EVENT_LOCATION_MAX_LENGTH, pattern=r"^[^\x00]*$",
     )] | None = None
@@ -45,7 +46,7 @@ class EventInput(Schema):
     project_id: InputId | None = None
     department_id: InputId | None = None
 
-    @field_validator("title", "description", "type", "starts_at", "ends_at", "timezone", "all_day")
+    @field_validator("title", "description", "type", "starts_at", "ends_at", "timezone", "all_day", "rsvp_mode")
     @classmethod
     def reject_null(cls, value):
         if value is None:
@@ -86,6 +87,11 @@ class EventOutput(CalendarItem):
     can_manage_scope: bool
     created_at: datetime
     updated_at: datetime
+    rsvp_mode: CalendarEvent.RSVPMode
+    rsvp_revision: int
+    invitation_id: int | None
+    can_invite: bool
+    can_manage_invitations: bool
 
 
 class CalendarOutput(Schema):

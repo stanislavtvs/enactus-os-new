@@ -378,3 +378,42 @@ HTML-формы отправляют изменения методом POST с C
 Общие поля записи включают `id`, `source`, `title`, `description`, `starts_at`, `ends_at`, `timezone`, `all_day`, `status`, `status_label`, `project_id`, `department_id`, `location`, `online_url`, `url`, `can_edit`, `can_cancel` и `can_archive`. Для дедлайна `ends_at` имеет значение `null`. Идентификаторы разных источников могут совпадать. Используйте пару `(source, id)`. Маршруты событий дополнительно возвращают `type`, `can_manage_scope`, `created_at` и `updated_at`. `/calendar/filters/` возвращает `projects` и `departments` с элементами `{id,name,can_create}`, а также `can_create` и `can_create_organization`.
 
 Недоступная организация, скрытое событие или чужой связанный объект дают HTTP 404. Недостаток права на действие или ошибка CSRF дают HTTP 403. Попытка изменить отменённое или архивное событие либо привязать архивный проект или подразделение даёт HTTP 409. Некорректный диапазон, интервал или часовой пояс дают HTTP 422.
+
+### Приглашения и RSVP
+
+Личный список доступен на `/organizations/{org_id}/calendar/invitations/`. Прямая ссылка на приглашение добавляет `{invitation_id}/`. Для приглашений используются сессия Django, активное членство и CSRF на изменяющих запросах.
+
+В таблице `{audience}` обозначает `/api/v1/organizations/{org_id}/events/{event_id}/invitations`.
+
+| Метод | Маршрут | Запрос и успешный ответ |
+|---|---|---|
+| GET | `{audience}/options/` | Необязательные `q` и `page` для поиска участников по имени пользователя. HTTP 200, допустимые варианты получателей. |
+| POST | `{audience}/preview/` | Выбор аудитории. HTTP 200, `{total,new,already_invited,revoked}`. |
+| POST | `{audience}/` | Выбор аудитории. HTTP 201, `{total,created,already_invited,revoked}`. |
+| GET | `{audience}/` | HTTP 200, `{items}` с приглашениями события. |
+| GET | `{audience}/stats/` | HTTP 200, статистика ответов. |
+| POST | `{audience}/refresh/` | HTTP 200, `{total,created,already_invited,revoked}` после обновления сохранённых групп. |
+| POST | `{audience}/{invitation_id}/revoke/` | HTTP 204, приглашение отозвано. |
+| GET | `{audience}/{invitation_id}/history/` | HTTP 200, `{items}` с предыдущими ответами. |
+
+Выбор аудитории содержит `member_ids` (идентификаторы членств в организации), `organization` (вся активная организация), `departments` (элементы `{id,include_descendants}`), `project_ids` и `reinvite_revoked`. Можно сочетать источники. `include_descendants=false` выбирает прямых активных участников подразделения. Предварительный подсчёт возвращает количества и не выдаёт состав групп. Список вариантов содержит `members`, `member_total`, `member_page`, `member_page_size`, `departments`, `projects`, `can_invite_organization` и `can_reinvite`.
+
+Для выбора получателей и отправки требуется `calendar.invite` в области события и доступ к выбранным источникам. Для списка, статистики, отзыва и повторной отправки отозванным нужно `calendar.invite.manage` в области события. Отзыв дополнительно проверяет все источники приглашения. Обновление аудитории требует обоих прав. Отправка и обновление доступны для запланированного события.
+
+Статистика содержит `invited`, `yes`, `no`, `maybe`, `pending`, `needs_reconfirmation`, `revoked`, `rsvp_mode`, `rsvp_revision`, `can_send` и `can_manage`. Список приглашений включает получателя, текущий ответ, даты, признак необходимости повторного подтверждения и право отзыва. История доступна с `calendar.invite.manage` и возвращает `id`, `response`, `response_revision`, `actor` и `created_at` для каждого изменения.
+
+Событие принимает `rsvp_mode` со значениями `informational`, `optional` и `required`. По умолчанию применяется `informational`. Настройка другого режима при создании и изменение режима через `PATCH /events/{event_id}/` требуют `calendar.invite.manage`. Обновление только режима может выполняться отдельно от редактирования остальных полей события.
+
+Ответ события содержит `rsvp_mode`, `rsvp_revision`, `invitation_id` текущего пользователя, `can_invite` и `can_manage_invitations`. Активное приглашение позволяет открыть ограниченное представление события и видеть его в календаре без фильтра закрытого проекта или подразделения. В этом представлении `project_id` и `department_id` равны `null`, описание скрыто, а полномочия управления отсутствуют.
+
+Маршруты получателя используют префикс `/api/v1/organizations/calendar/invitations`.
+
+| Метод | Маршрут после префикса | Запрос и успешный ответ |
+|---|---|---|
+| GET | `/` | Необязательный query-параметр `org_id`. HTTP 200, `{items}` с собственными активными приглашениями. |
+| GET | `/{invitation_id}/` | HTTP 200, собственное приглашение. |
+| POST | `/{invitation_id}/respond/` | `response` (`yes`, `no` или `maybe`), `expected_revision` и `expected_response_at`. HTTP 200, обновлённое приглашение. |
+
+Для ответа передайте текущую `rsvp_revision` как `expected_revision` и текущий `responded_at` как `expected_response_at` (может быть `null`). Это позволяет отклонить устаревший запрос с HTTP 409. Повтор той же операции с тем же ответом в текущей версии возвращает подтверждение без дублирования истории. При информационном режиме, отмене и архивировании новые ответы недоступны. Подменить получателя в теле запроса нельзя.
+
+Собственное приглашение содержит идентификаторы приглашения, события и организации, имя организации и организатора, режим и версию RSVP, текущий ответ и его версию, дату ответа, `needs_reconfirmation`, `can_respond` и безопасную сводку `event` с названием, временем, местом, онлайн-ссылкой и состоянием. Записи чужих, отозванных и недоступных приглашений по идентификатору дают HTTP 404.

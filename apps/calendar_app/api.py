@@ -1,5 +1,6 @@
 from django.core.exceptions import PermissionDenied
 from django.db import IntegrityError
+from django.http import HttpResponse
 from ninja import PatchDict, Query, Router
 from ninja.errors import HttpError
 from ninja.security import django_auth
@@ -59,8 +60,9 @@ def _event_changes(payload):
 
 
 @router.get("/{org_id}/calendar/", response=CalendarOutput, url_name="calendar_feed")
-def get_calendar(request, org_id: RecordId, filters: Query[CalendarQuery]):
+def get_calendar(request, response: HttpResponse, org_id: RecordId, filters: Query[CalendarQuery]):
     access = organization_access(user=request.user, org_id=org_id)
+    response["Cache-Control"] = "no-store"
     return {"items": _perform(services.calendar_feed, access=access, **_filters(filters))}
 
 
@@ -71,8 +73,9 @@ def get_calendar_filters(request, org_id: RecordId):
 
 
 @router.get("/{org_id}/events/", response=EventListOutput, url_name="calendar_event_list")
-def list_calendar_events(request, org_id: RecordId, filters: Query[EventQuery]):
+def list_calendar_events(request, response: HttpResponse, org_id: RecordId, filters: Query[EventQuery]):
     access = organization_access(user=request.user, org_id=org_id)
+    response["Cache-Control"] = "no-store"
     return {"items": _perform(services.list_events, access=access, **_filters(filters))}
 
 
@@ -84,9 +87,11 @@ def create_calendar_event(request, org_id: RecordId, payload: EventInput):
 
 
 @router.get("/{org_id}/events/{event_id}/", response=EventOutput, url_name="calendar_event_detail")
-def get_calendar_event(request, org_id: RecordId, event_id: RecordId):
+def get_calendar_event(request, response: HttpResponse, org_id: RecordId, event_id: RecordId):
     access = organization_access(user=request.user, org_id=org_id)
-    return services.event_item(access, services.visible_event(access=access, event_id=event_id))
+    response["Cache-Control"] = "no-store"
+    event = services.visible_event(access=access, event_id=event_id, allow_invitation=True)
+    return services.event_item(access, event)
 
 
 @router.patch("/{org_id}/events/{event_id}/", response=EventOutput)

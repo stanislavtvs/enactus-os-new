@@ -1,0 +1,18 @@
+<section id="calendar-participants" class="calendar-participants" aria-labelledby="calendar-participants-heading" hidden>
+    <header class="calendar-participants-heading">
+        <div>
+            <h3 id="calendar-participants-heading" tabindex="-1">Участники</h3>
+            <p id="calendar-participants-mode" class="muted"></p>
+        </div>
+        <button class="button button-primary" id="calendar-invite" type="button" aria-haspopup="dialog"
+                aria-controls="calendar-invite-dialog" aria-label="Пригласить участников" hidden>+</button>
+    </header>
+    <p id="calendar-participants-status" class="muted calendar-message" role="status"></p>
+    <p id="calendar-participants-error" class="form-errors calendar-message" role="alert"></p>
+    <dl id="calendar-participants-totals" class="calendar-participants-totals"></dl>
+    <div id="calendar-participants-controls" class="calendar-participants-controls"></div>
+    <details id="calendar-participants-disclosure" hidden>
+        <summary>Список приглашённых</summary>
+        <ul id="calendar-participants-list" class="calendar-participants-list" role="list"></ul>
+    </details>
+</section>
