@@ -1,0 +1,13 @@
+.git
+.codex
+.agents
+.aws
+.env
+.env.*
+.venv
+**/__pycache__
+**/*.py[cod]
+.pytest_cache
+.coverage
+**/*.sqlite3
+**/*.dump

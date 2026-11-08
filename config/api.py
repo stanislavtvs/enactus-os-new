@@ -1,0 +1,21 @@
+from typing import Literal
+
+from django.conf import settings
+from ninja import NinjaAPI, Schema
+
+
+class HealthResponse(Schema):
+    status: Literal["ok"]
+
+
+api = NinjaAPI(
+    title="Enactus OS",
+    version="1.0.0",
+    docs_url="/docs" if settings.DEBUG else None,
+    openapi_url="/openapi.json" if settings.DEBUG else None,
+)
+
+
+@api.get("/health/", response=HealthResponse, auth=None)
+def health(request):
+    return {"status": "ok"}
