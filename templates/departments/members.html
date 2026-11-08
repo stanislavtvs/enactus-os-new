@@ -1,0 +1,80 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Участники — {{ department.name }} — Enactus OS{% endblock %}
+{% block extra_head %}
+    <link rel="stylesheet" href="{% static 'departments/departments.css' %}">
+    <script type="module" src="{% static 'departments/members.js' %}"></script>
+{% endblock %}
+
+{% block content %}
+    <nav class="breadcrumbs" aria-label="Путь к странице">
+        <a href="{% url 'organization-list' %}">Мои организации</a>
+        <span aria-hidden="true"> / </span>
+        <a href="{% url 'organization-departments' org_id=organization.id %}">Структура организации</a>
+    </nav>
+    <header class="page-heading">
+        <p class="eyebrow">{{ organization.name }} · {{ department.name }}</p>
+        <h1>Участники подразделения</h1>
+        <p>Найдите человека и посмотрите, в каких подразделениях он состоит.</p>
+    </header>
+
+    <noscript><p>Включите JavaScript, чтобы загрузить список участников.</p></noscript>
+    <div class="workspace-grid" id="department-members-app"
+         data-department-url="{{ api_department_url }}"
+         data-organization-url="{{ api_organization_url }}"
+         data-visibility="{{ directory_visibility }}"
+         data-can-manage="{{ can_manage_members|yesno:'true,false' }}">
+        {% if can_manage_members or can_edit_directory_policy %}{% csrf_token %}{% endif %}
+        <p class="muted department-message" id="department-members-status" role="status"></p>
+        <p class="form-errors department-message" id="department-members-error" role="alert"></p>
+        <button class="button department-secondary" id="department-members-retry" type="button" hidden>Обновить каталог</button>
+
+        {% if can_edit_directory_policy %}
+            <section class="card card-padded" aria-labelledby="department-policy-heading" id="department-policy-panel" hidden>
+                <h2 id="department-policy-heading">Видимость каталога в организации</h2>
+                <form method="post" class="form-stack" id="department-directory-policy">
+                    <div class="form-field department-control">
+                        <label for="department-directory-visibility">Что могут видеть участники</label>
+                        <select id="department-directory-visibility" name="visibility">
+                            <option value="branch"{% if directory_visibility == 'branch' %} selected{% endif %}>Только доступные ветки</option>
+                            <option value="organization"{% if directory_visibility == 'organization' %} selected{% endif %}>Всю организацию</option>
+                        </select>
+                    </div>
+                    <button type="submit" class="button button-primary">Сохранить видимость</button>
+                </form>
+            </section>
+        {% endif %}
+
+        <section class="card card-padded" aria-labelledby="department-members-heading">
+            <h2 id="department-members-heading" tabindex="-1">Каталог участников</h2>
+            <div class="department-directory-filters" id="department-members-filters" hidden>
+                <div class="form-field department-control">
+                    <label for="department-members-search">Поиск по имени или подразделению</label>
+                    <input type="search" id="department-members-search">
+                </div>
+                <div class="form-field department-control">
+                    <label for="department-members-scope">Показать</label>
+                    <select id="department-members-scope">
+                        <option value="branch">Все в этой ветке</option>
+                        <option value="direct">Прямые участники</option>
+                        <option value="descendants">Участники вложенных отделов</option>
+                        {% if can_manage_members or directory_visibility == 'organization' %}
+                            <option value="others">Вне этой ветки</option>
+                        {% endif %}
+                    </select>
+                </div>
+            </div>
+            <p class="muted department-message" id="department-members-results" role="status"></p>
+            <ul class="department-directory-list" id="department-members-list" role="list"></ul>
+        </section>
+
+        {% if can_manage_members %}
+            <section class="card card-padded" aria-labelledby="department-history-heading">
+                <h2 id="department-history-heading">История приглашений в подразделение</h2>
+                <p class="muted department-message" id="department-history-empty" hidden>Приглашений пока нет.</p>
+                <ul class="department-directory-list" id="department-invitation-history" role="list"></ul>
+            </section>
+        {% endif %}
+    </div>
+{% endblock %}

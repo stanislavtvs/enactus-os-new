@@ -25,11 +25,14 @@
                         <a href="{% url 'home' %}"{% if route == 'home' %} class="active" aria-current="page"{% endif %}>
                             <svg class="icon" aria-hidden="true"><use href="#icon-home"/></svg> Главная
                         </a>
-                        <a href="{% url 'organization-list' %}"{% if route == 'organization-list' %} class="active" aria-current="page"{% elif route == 'organization-detail' or route == 'organization-manage' %} class="active" aria-current="location"{% endif %}>
+                        <a href="{% url 'organization-list' %}"{% if route == 'organization-list' %} class="active" aria-current="page"{% elif route == 'organization-detail' or route == 'organization-manage' or route == 'organization-departments' or route == 'department-members' %} class="active" aria-current="location"{% endif %}>
                             <svg class="icon" aria-hidden="true"><use href="#icon-org"/></svg> Организации
                         </a>
                         <a href="{% url 'organization-invitations' %}"{% if route == 'organization-invitations' %} class="active" aria-current="page"{% endif %}>
-                            <svg class="icon" aria-hidden="true"><use href="#icon-invite"/></svg> Приглашения
+                            <svg class="icon" aria-hidden="true"><use href="#icon-invite"/></svg> Приглашения в организации
+                        </a>
+                        <a href="{% url 'department-invitations' %}"{% if route == 'department-invitations' %} class="active" aria-current="page"{% endif %}>
+                            <svg class="icon" aria-hidden="true"><use href="#icon-invite"/></svg> Приглашения в подразделения
                         </a>
                     </nav>
                     <form method="post" action="{% url 'logout' %}" class="sidebar-footer">

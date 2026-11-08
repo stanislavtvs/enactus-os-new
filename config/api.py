@@ -4,6 +4,7 @@ from django.conf import settings
 from ninja import NinjaAPI, Schema
 
 from apps.departments.api import router as departments_router
+from apps.departments.membership_api import router as department_membership_router
 from apps.organizations.api import router as organizations_router
 from apps.organizations.onboarding_api import router as onboarding_router
 
@@ -19,6 +20,7 @@ api = NinjaAPI(
     openapi_url="/openapi.json" if settings.DEBUG else None,
 )
 
+api.add_router("/organizations", department_membership_router)
 api.add_router("/organizations", departments_router)
 api.add_router("/organizations", onboarding_router)
 api.add_router("/organizations", organizations_router)

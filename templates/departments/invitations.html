@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Приглашения в подразделения — Enactus OS{% endblock %}
+{% block extra_head %}
+    <link rel="stylesheet" href="{% static 'departments/departments.css' %}">
+    <script type="module" src="{% static 'departments/invitations.js' %}"></script>
+{% endblock %}
+
+{% block content %}
+    <header class="page-heading">
+        <p class="eyebrow">Рабочие области</p>
+        <h1>Приглашения в подразделения</h1>
+        <p>Ответьте на приглашения, адресованные вашей учётной записи.</p>
+    </header>
+
+    <noscript><p>Включите JavaScript, чтобы загрузить приглашения.</p></noscript>
+    <div id="department-invitation-app" data-api-url="{{ department_invitation_api_url }}">
+        {% csrf_token %}
+        <section class="card card-padded" aria-labelledby="department-invitation-heading">
+            <h2 id="department-invitation-heading" tabindex="-1">Мои приглашения</h2>
+            <p class="muted department-message" id="department-invitation-status" role="status"></p>
+            <p class="form-errors department-message" id="department-invitation-error" role="alert"></p>
+            <button class="button department-secondary" id="department-invitation-retry" type="button" hidden>Обновить приглашения</button>
+            <ul class="department-directory-list" id="department-invitations-list" role="list"></ul>
+        </section>
+    </div>
+{% endblock %}

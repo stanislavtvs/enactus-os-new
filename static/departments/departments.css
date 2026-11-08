@@ -84,7 +84,8 @@
 }
 
 .department-fields select,
-.department-fields textarea {
+.department-fields textarea,
+.department-control select {
     width: 100%;
     min-height: 2.75rem;
     padding: 0.55rem 0.7rem;
@@ -115,3 +116,43 @@
         padding-inline-start: min(calc(var(--department-depth) * 0.55rem), 1.65rem);
     }
 }
+
+.department-directory-filters {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(14rem, 100%), 1fr));
+    gap: var(--space-sm);
+    margin-top: var(--space-md);
+}
+
+.department-directory-list {
+    margin: var(--space-sm) 0 0;
+    padding: 0;
+    list-style: none;
+}
+
+.department-directory-list:empty { margin: 0; }
+
+.department-directory-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: start;
+    justify-content: space-between;
+    gap: var(--space-xs) var(--space-md);
+    padding: var(--space-sm) 0;
+    border-top: 1px solid var(--line);
+    overflow-wrap: anywhere;
+}
+
+.department-directory-row > div { min-width: 0; }
+.department-directory-row .button { min-height: 2.35rem; }
+.department-directory-row.is-outside { color: var(--muted); }
+
+.department-membership-paths {
+    margin: var(--space-xs) 0 0;
+    padding-inline-start: 1.15rem;
+}
+
+.department-membership-paths li + li { margin-top: var(--space-xs); }
+.department-membership-paths .button { margin-inline-start: var(--space-xs); }
+
+#department-members-app > .department-message:empty { margin-bottom: calc(-1 * var(--space-md)); }

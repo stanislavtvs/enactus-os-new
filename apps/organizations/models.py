@@ -6,6 +6,10 @@ ORGANIZATION_NAME_MAX_LENGTH = 200
 
 
 class Organization(models.Model):
+    class DepartmentDirectoryVisibility(models.TextChoices):
+        BRANCH = "branch", "Своё подразделение и его ветка"
+        ORGANIZATION = "organization", "Вся организация"
+
     class JoinPolicy(models.TextChoices):
         INVITES = "invites", "Только приглашения"
         REQUESTS = "requests", "Только заявки"
@@ -18,6 +22,11 @@ class Organization(models.Model):
         related_name="owned_organizations",
     )
     created_at = models.DateTimeField(auto_now_add=True)
+    department_directory_visibility = models.CharField(
+        max_length=12,
+        choices=DepartmentDirectoryVisibility,
+        default=DepartmentDirectoryVisibility.BRANCH,
+    )
     join_policy = models.CharField(
         max_length=8,
         choices=JoinPolicy,
@@ -48,6 +57,10 @@ class OrganizationMembership(models.Model):
             models.UniqueConstraint(
                 fields=["user", "organization"],
                 name="unique_organization_membership",
+            ),
+            models.UniqueConstraint(
+                fields=["organization", "id"],
+                name="unique_org_membership_organization_id",
             ),
         ]
 

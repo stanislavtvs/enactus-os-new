@@ -122,9 +122,15 @@ function renderTree() {
         }
 
         row.append(info);
-        if (form && !item.is_archived) {
+        if (!item.is_archived) {
             const actions = element("div", "department-actions");
-            actions.append(action("Редактировать", item, edit), action("Архивировать ветку", item, archive));
+            const membersLink = element("a", "button department-secondary", "Участники");
+            membersLink.href = `${app.dataset.structureUrl}${item.id}/members/`;
+            membersLink.setAttribute("aria-label", `Участники: ${item.name}`);
+            actions.append(membersLink);
+            if (form) {
+                actions.append(action("Редактировать", item, edit), action("Архивировать ветку", item, archive));
+            }
             row.append(actions);
         }
     }
